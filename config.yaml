@@ -1,5 +1,5 @@
 root_dir: '/mnt/c/Datasets/BCS-DBT-Szymon'
-data_dir: 'original' # 'stylegan', 'vqvae'
+data_dir: 'vqvae' # 'stylegan', 'vqvae' , 'original'
 batch_size: 32
 learning_rate: 0.001
 num_epochs: 10

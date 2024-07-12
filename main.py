@@ -70,6 +70,7 @@ optimizers = {name: torch.optim.Adam(model.parameters(), lr=learning_rate) for n
 
 metrics = {name: {'train_loss': [], 'train_acc': [], 'train_auc': [], 'val_loss': [], 'val_acc': [], 'val_auc': []} for name in model_names}
 
+metrics_file_name = os.path.join(experiment_path, f'{experiment_number:03d}_metrics.pkl')
 # Training and evaluation loop
 for epoch in range(num_epochs):
     print(f'Epoch {epoch + 1}/{num_epochs}')
@@ -112,7 +113,7 @@ for epoch in range(num_epochs):
                 running_loss += loss.item() * inputs.size(0)
                 correct_preds += torch.sum(preds == labels.data)
                 all_labels.extend(labels.cpu().numpy())
-                all_preds.extend(outputs.softmax(dim=1).cpu().numpy()[:, 1])
+                all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy()[:, 1])
 
             epoch_loss = running_loss / len(data_loader.dataset)
             epoch_acc = correct_preds.double() / len(data_loader.dataset)
@@ -128,6 +129,8 @@ for epoch in range(num_epochs):
                 metrics[model_name]['val_loss'].append(epoch_loss)
                 metrics[model_name]['val_acc'].append(epoch_acc.item())
                 metrics[model_name]['val_auc'].append(epoch_auc)
+            with open(metrics_file_name, 'wb') as f:
+                pickle.dump(metrics, f)
 
 # Directory creation and saving models and metrics
 for model_name, model in models.items():
@@ -137,13 +140,5 @@ for model_name, model in models.items():
     
     model_file_name = os.path.join(directory_name, f'{model_name}.pth')
     torch.save(model.state_dict(), model_file_name)
-
-metrics_directory = os.path.join(experiment_path, f'{experiment_number:03d}_metrics_{final_folder}')
-if not os.path.exists(metrics_directory):
-    os.makedirs(metrics_directory)
-
-metrics_file_name = os.path.join(metrics_directory, 'metrics.pkl')
-with open(metrics_file_name, 'wb') as f:
-    pickle.dump(metrics, f)
 
 print("Training and evaluation complete. Models and metrics saved.")
