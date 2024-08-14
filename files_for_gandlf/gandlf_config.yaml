@@ -7,17 +7,18 @@ version:
 # Choose the model parameters here
 model:
   {
-    dimension: 3, # the dimension of the model and dataset: defines dimensionality of computations
+    dimension: 2, # the dimension of the model and dataset: defines dimensionality of computations
     base_filters: 30, # Set base filters: number of filters present in the initial module of the U-Net convolution; for IncU-Net, keep this divisible by 4
-    architecture: vgg16, # options: unet, resunet, fcn, uinc, vgg, densenet
-    batch_norm: True, # this is only used for vgg
-    final_layer: None, # can be either sigmoid, softmax or none (none == regression)
+    architecture: vgg, # options: unet, resunet, fcn, uinc, vgg, densenet
+    norm_type: batch, # this is only used for vgg
+    final_layer: softmax, # can be either sigmoid, softmax or none (none == regression)
     amp: False, # Set if you want to use Automatic Mixed Precision for your operations or not - options: True, False
-    n_channels: 3, # set the input channels - useful when reading RGB or images that have vectored pixel types
+    n_channels: 1, # set the input channels - useful when reading RGB or images that have vectored pixel types
+    class_list: [0,1]
   }
 # metrics to evaluate the validation performance
 metrics:
-  - 'mse'
+  - 'f1'
 # this is to enable or disable lazy loading - setting to true reads all data once during data loading, resulting in improvements
 # in I/O at the expense of memory consumption
 in_memory: False
@@ -34,7 +35,7 @@ num_epochs: 100
 # Set the patience - measured in number of epochs after which, if the performance metric does not improve, exit the training loop - defaults to the number of epochs
 patience: 50
 # Set the batch size
-batch_size: 1
+batch_size: 12
 # Set the initial learning rate
 learning_rate: 0.001
 # Learning rate scheduler - options: triangle, triangle_modified, exp, reduce-on-lr, step, more to come soon - default hyperparameters can be changed thru code
@@ -43,7 +44,7 @@ scheduler: triangle
 # options: dc (dice only), dc_log (-log of dice), ce (), dcce (sum of dice and ce), mse () ...
 # mse is the MSE defined by torch and can define a variable 'reduction'; see https://pytorch.org/docs/stable/generated/torch.nn.MSELoss.html#torch.nn.MSELoss
 # use mse_torch for regression/classification problems and dice for segmentation
-loss_function: mse
+loss_function: cel
 # this parameter weights the loss to handle imbalanced losses better
 weighted_loss: False # True 
 #loss_function:
@@ -60,6 +61,7 @@ optimizer: adam
 # for single fold run, use '-' before the fold number
 nested_training:
   {
+    stratified: True,
     testing: 5, # this controls the testing data splits for final model evaluation; use '1' if this is to be disabled
     validation: 5 # this controls the validation data splits for model training
   }

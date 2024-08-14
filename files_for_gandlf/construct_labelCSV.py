@@ -2,9 +2,13 @@ import os
 import csv
 
 # Define paths to your dataset folders
-dataset_root = "/mnt/c/Datasets/BCS-DBT-Szymon/original"
+# dataset_root = "/mnt/c/Datasets/BCS-DBT-Szymon/original"
+dataset_root = "/mnt/c/Datasets/BCS-DBT-Szymon/vqvae"
 abnormal_root = os.path.join(dataset_root, "abnormal")
 healthy_root = os.path.join(dataset_root, "healthy")
+
+csv_file = "dataset.csv"
+header = ["SubjectID", "Channel_0", "ValueToPredict"]
 
 # Function to extract paths for each subject
 def extract_subject_paths(root_path):
@@ -12,17 +16,16 @@ def extract_subject_paths(root_path):
     for subject_folder in os.listdir(root_path):
         subject_id = subject_folder  # Assuming subject_folder names are the IDs
         subject_folder_path = os.path.join(root_path, subject_folder)
-        image_path = os.path.join(subject_folder_path, "slice.nii.gz")
+        if "vqvae" in dataset_root:
+            image_path = os.path.join(subject_folder_path, "slice_unclamped_reconstructed.nii.gz")
+        elif "original" in dataset_root:
+            image_path = os.path.join(subject_folder_path, "slice.nii.gz")
         subject_paths.append([subject_id, image_path])
     return subject_paths
 
 # Get paths for abnormal and healthy subjects
 abnormal_subjects = extract_subject_paths(abnormal_root)
 healthy_subjects = extract_subject_paths(healthy_root)
-
-# Prepare CSV writing
-csv_file = "dataset.csv"
-header = ["SubjectID", "Channel_0", "ValueToPredict"]
 
 # Function to determine ValueToPredict based on folder type
 def determine_value_to_predict(subject_id):
