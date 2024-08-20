@@ -9,7 +9,8 @@ model:
   {
     dimension: 2, # the dimension of the model and dataset: defines dimensionality of computations
     base_filters: 30, # Set base filters: number of filters present in the initial module of the U-Net convolution; for IncU-Net, keep this divisible by 4
-    architecture: vgg, # options: unet, resunet, fcn, uinc, vgg, densenet
+    architecture: densenet, # options: unet, resunet, fcn, uinc, vgg, densenet
+    pretrained: True,
     norm_type: batch, # this is only used for vgg
     final_layer: softmax, # can be either sigmoid, softmax or none (none == regression)
     amp: False, # Set if you want to use Automatic Mixed Precision for your operations or not - options: True, False
@@ -37,7 +38,7 @@ patience: 50
 # Set the batch size
 batch_size: 12
 # Set the initial learning rate
-learning_rate: 0.001
+learning_rate: 0.01
 # Learning rate scheduler - options: triangle, triangle_modified, exp, reduce-on-lr, step, more to come soon - default hyperparameters can be changed thru code
 scheduler: triangle
 # Set which loss function you want to use - options : 'dc' - for dice only, 'dcce' - for sum of dice and CE and you can guess the next (only lower-case please)
@@ -62,7 +63,7 @@ optimizer: adam
 nested_training:
   {
     stratified: True,
-    testing: 5, # this controls the testing data splits for final model evaluation; use '1' if this is to be disabled
+    testing: 1, # this controls the testing data splits for final model evaluation; use '1' if this is to be disabled
     validation: 5 # this controls the validation data splits for model training
   }
 ## pre-processing
