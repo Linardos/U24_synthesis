@@ -5,10 +5,12 @@ import numpy as np
 
 # Define paths
 input_dir = '/mnt/c/Datasets/BCS-DBT-Szymon/original'
-output_dir = '/mnt/c/Datasets/BCS-DBT-Szymon/resized_original'
+output_dir = '/mnt/c/Datasets/BCS-DBT-Szymon/original_512x512'
+output_dir = '/mnt/c/Datasets/BCS-DBT-Szymon/original_256x256'
 
 # Desired output size for 2D images
 output_size = (512, 512)
+output_size = (256, 256)
 
 # Ensure output directory structure mirrors the input directory structure
 if not os.path.exists(output_dir):
