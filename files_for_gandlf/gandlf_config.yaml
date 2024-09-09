@@ -9,7 +9,7 @@ model:
   {
     dimension: 2, # the dimension of the model and dataset: defines dimensionality of computations
     base_filters: 30, # Set base filters: number of filters present in the initial module of the U-Net convolution; for IncU-Net, keep this divisible by 4
-    architecture: densenet, # options: unet, resunet, fcn, uinc, vgg, densenet
+    architecture: imagenet_unet, # options: unet, resunet, fcn, uinc, vgg, densenet
     pretrained: True,
     norm_type: batch, # this is only used for vgg
     final_layer: softmax, # can be either sigmoid, softmax or none (none == regression)
@@ -20,6 +20,8 @@ model:
 # metrics to evaluate the validation performance
 metrics:
   - 'f1'
+  - 'precision'
+  - 'recall'
 # this is to enable or disable lazy loading - setting to true reads all data once during data loading, resulting in improvements
 # in I/O at the expense of memory consumption
 in_memory: True
@@ -38,9 +40,9 @@ patience: 50
 # Set the batch size
 batch_size: 12
 # Set the initial learning rate
-learning_rate: 0.01
+learning_rate: 0.1
 # Learning rate scheduler - options: triangle, triangle_modified, exp, reduce-on-lr, step, more to come soon - default hyperparameters can be changed thru code
-scheduler: triangle
+scheduler: cosineannealing
 # Set which loss function you want to use - options : 'dc' - for dice only, 'dcce' - for sum of dice and CE and you can guess the next (only lower-case please)
 # options: dc (dice only), dc_log (-log of dice), ce (), dcce (sum of dice and ce), mse () ...
 # mse is the MSE defined by torch and can define a variable 'reduction'; see https://pytorch.org/docs/stable/generated/torch.nn.MSELoss.html#torch.nn.MSELoss
