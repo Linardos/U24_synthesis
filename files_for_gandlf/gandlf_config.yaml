@@ -40,9 +40,9 @@ patience: 50
 # Set the batch size
 batch_size: 12
 # Set the initial learning rate
-learning_rate: 0.1
+learning_rate: 0.2
 # Learning rate scheduler - options: triangle, triangle_modified, exp, reduce-on-lr, step, more to come soon - default hyperparameters can be changed thru code
-scheduler: cosineannealing
+scheduler: warmupcosineschedule
 # Set which loss function you want to use - options : 'dc' - for dice only, 'dcce' - for sum of dice and CE and you can guess the next (only lower-case please)
 # options: dc (dice only), dc_log (-log of dice), ce (), dcce (sum of dice and ce), mse () ...
 # mse is the MSE defined by torch and can define a variable 'reduction'; see https://pytorch.org/docs/stable/generated/torch.nn.MSELoss.html#torch.nn.MSELoss
