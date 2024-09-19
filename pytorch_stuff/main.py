@@ -10,6 +10,8 @@ from data_loaders_S import NiftiDataset  # Assuming NiftiDataset is defined in d
 from tqdm import tqdm
 from sklearn.metrics import roc_auc_score
 import shutil
+import csv  # Import the csv module
+
 # Set random seed for reproducibility
 random_seed = 42
 torch.manual_seed(random_seed)
@@ -26,10 +28,9 @@ batch_size = config['batch_size']
 learning_rate = config['learning_rate']
 num_epochs = config['num_epochs']
 val_split = config['val_split']
-resize_height = config['resize_height']
-resize_width = config['resize_width']
 model_names = config['model_names']
 experiment_number = config['experiment_number']
+resize_check = config['resize_check']
 
 # Extract the final folder name from the data directory
 final_folder = data_dir
@@ -39,6 +40,8 @@ experiment_folder = f'{experiment_number:03d}_{model_names[0]}_{final_folder}'
 experiments_folder = 'experiments'
 experiment_path = os.path.join(experiments_folder, experiment_folder)
 
+print(f"Starting experiment for {data_dir}, whose variables will be stored at: {experiment_path}")
+
 # Create experiment folder if it doesn't exist
 if not os.path.exists(experiment_path):
     os.makedirs(experiment_path)
@@ -46,29 +49,26 @@ if not os.path.exists(experiment_path):
 # Save config.yaml in the experiment folder
 shutil.copy('config.yaml', experiment_path)
 
-transform = transforms.Compose([
-    transforms.Resize((resize_height, resize_width)),  # Resize images to a standard size
-])
+# Transform with random flipping
+# transform = transforms.Compose([
+#     transforms.RandomHorizontalFlip(),  # Randomly flip images horizontally
+#     transforms.RandomVerticalFlip()     # Randomly flip images vertically
+# ])
 
+transform = None
 # Load the dataset
+print (f"loading data from {full_data_path}")
 dataset = NiftiDataset(full_data_path=full_data_path, transform=transform)
+
+print(f"Dataset contains {len(dataset)} samples.")
 
 # Split dataset into training and validation sets
 train_size = int((1 - val_split) * len(dataset))
 val_size = len(dataset) - train_size
 train_dataset, val_dataset = random_split(dataset, [train_size, val_size], generator=torch.Generator().manual_seed(random_seed))
 
-# Ensure no overlap between train and validation datasets
-train_indices = set(train_dataset.indices)
-val_indices = set(val_dataset.indices)
-assert len(train_indices.intersection(val_indices)) == 0, "Train and validation sets overlap!"
-
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-
-# Print some sample indices to verify the split
-print(f"Train indices (sample): {list(train_indices)[:10]}")
-print(f"Validation indices (sample): {list(val_indices)[:10]}")
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 models = {name: get_model(name, pretrained=False) for name in model_names}
@@ -83,6 +83,16 @@ optimizers = {name: torch.optim.Adam(model.parameters(), lr=learning_rate) for n
 metrics = {name: {'train_loss': [], 'train_acc': [], 'train_auc': [], 'val_loss': [], 'val_acc': [], 'val_auc': []} for name in model_names}
 
 metrics_file_name = os.path.join(experiment_path, f'{experiment_number:03d}_metrics.pkl')
+
+# CSV log file path
+csv_log_file = os.path.join(experiment_path, 'logs.csv')
+
+# Write CSV header
+with open(csv_log_file, mode='w', newline='') as csvfile:
+    fieldnames = ['epoch', 'phase', 'model_name', 'loss', 'accuracy', 'AUC']
+    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    writer.writeheader()
+
 # Training and evaluation loop
 for epoch in range(num_epochs):
     print(f'Epoch {epoch + 1}/{num_epochs}')
@@ -133,6 +143,7 @@ for epoch in range(num_epochs):
 
             print(f'{model_name} - {phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f} AUC: {epoch_auc:.4f}')
 
+            # Store the metrics in the dictionary
             if phase == 'train':
                 metrics[model_name]['train_loss'].append(epoch_loss)
                 metrics[model_name]['train_acc'].append(epoch_acc.item())
@@ -141,10 +152,24 @@ for epoch in range(num_epochs):
                 metrics[model_name]['val_loss'].append(epoch_loss)
                 metrics[model_name]['val_acc'].append(epoch_acc.item())
                 metrics[model_name]['val_auc'].append(epoch_auc)
+
+            # Save metrics to pickle file
             with open(metrics_file_name, 'wb') as f:
                 pickle.dump(metrics, f)
 
-# Directory creation and saving models and metrics
+            # Log metrics to CSV file
+            with open(csv_log_file, mode='a', newline='') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writerow({
+                    'epoch': epoch + 1,
+                    'phase': phase,
+                    'model_name': model_name,
+                    'loss': epoch_loss,
+                    'accuracy': epoch_acc.item(),
+                    'AUC': epoch_auc
+                })
+
+# Directory creation and saving models
 for model_name, model in models.items():
     directory_name = os.path.join(experiment_path, f'{experiment_number:03d}_{model_name}_{final_folder}')
     if not os.path.exists(directory_name):
@@ -153,4 +178,4 @@ for model_name, model in models.items():
     model_file_name = os.path.join(directory_name, f'{model_name}.pth')
     torch.save(model.state_dict(), model_file_name)
 
-print("Training and evaluation complete. Models and metrics saved.")
+print("Training and evaluation complete. Models, metrics, and logs saved.")
