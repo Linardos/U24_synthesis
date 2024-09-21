@@ -44,10 +44,8 @@ class NiftiDataset(Dataset):
         nifti_img = nib.load(file_path)
         img_array = nifti_img.get_fdata()
         img_tensor = torch.tensor(img_array, dtype=torch.float32)  # Convert to tensor
+        img_tensor = img_tensor.unsqueeze(0)  # Add channel dimension: [1, H, W, D]
 
-        # Check if the tensor is 3D (height, width, depth) and add a channel dimension if needed
-        if img_tensor.dim() == 3:  # If it has [H, W, D], we need to add a channel dimension
-            img_tensor = img_tensor.unsqueeze(0)  # Add channel dimension: [1, H, W, D]
         # Check if the tensor has an extra singleton dimension at the end and remove it
         if img_tensor.shape[-1] == 1:
             img_tensor = img_tensor.squeeze(-1)  # Remove singleton dimension at the end
