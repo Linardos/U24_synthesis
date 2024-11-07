@@ -1,0 +1,24 @@
+root_dir: '/home/locolinux2/datasets/BCS-DBT-Szymon'
+data_dir: 'original_256x256' #'original_256x256' # 'stylegan_256x256', 'vqvae' , 'original'
+batch_size: 12
+learning_rate: 0.01
+num_epochs: 10
+pretrained: False
+val_split: 0.2
+sanity_check: True
+resize_check: False
+# resize_height: 256
+# resize_width: 256
+model_names:
+  - resnet50
+  # - simplecnn #an extremely simple model only for sanity
+  # - alexnet
+  # - efficientnet_b0
+  # - densenet121
+  # - densenet169
+  # - densenet201
+  # - vgg16
+  # - vgg19
+k_folds: 0
+experiment_number: 10  # Add your experiment number here
+experiment_name: stratified_fourmodels_multiclass #cross_validation
