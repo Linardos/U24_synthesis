@@ -67,10 +67,10 @@ print(f"Dataset contains {len(dataset)} samples.")
 # Extract labels for stratified splitting and count the occurrences of each label for Data summary
 labels = np.array([dataset[i][1] for i in range(len(dataset))])
 unique_labels, label_counts = np.unique(labels, return_counts=True)
-label_names = {0: 'Healthy', 1: 'Benign', 2: 'Cancer'}
+label_names = {0: 'Benign', 1: 'Malignant'}
 label_summary = {label_names[label]: count for label, count in zip(unique_labels, label_counts)}
 print("Dataset Summary:")
-for label, count in label_summary.items():
+for label, count in tqdm(label_summary.items()):
     print(f"{label}: {count}")
 
 
@@ -81,7 +81,7 @@ models = {name: get_model(name, pretrained=config['pretrained']) for name in mod
 for model in models.values():
     model.to(device)
 
-criterion = nn.CrossEntropyLoss()
+criterion = nn.BCEWithLogitsLoss()
 optimizers = {name: torch.optim.Adam(model.parameters(), lr=learning_rate) for name, model in models.items()}
 
 # CSV log file path
@@ -133,13 +133,16 @@ if k_folds <= 0:
 
                 for inputs, labels in tqdm(data_loader):
                     inputs = inputs.to(device)
-                    labels = labels.to(device)
+                    labels = labels.to(device).float().unsqueeze(1)
+
 
                     if phase == 'train':
                         optimizers[model_name].zero_grad()
 
                     with torch.set_grad_enabled(phase == 'train'):
                         outputs = model(inputs)
+                        # print(f"outputs: {outputs.shape}, dtype: {outputs.dtype}")
+                        # print(f"labels: {labels.shape}, dtype: {labels.dtype}")
                         loss = criterion(outputs, labels)
                         _, preds = torch.max(outputs, 1)
 
@@ -148,15 +151,19 @@ if k_folds <= 0:
                             optimizers[model_name].step()
 
                     running_loss += loss.item() * inputs.size(0)
-                    correct_preds += torch.sum(preds == labels.data)
+                    correct_preds += torch.sum(preds == labels.data)  # Count correct predictions
+                    total_preds += labels.size(0)  # Track total number of predictions
                     all_labels.extend(labels.cpu().numpy())
-                    all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy())
+                    all_preds.extend(torch.sigmoid(outputs).cpu().detach().numpy())
+                    # all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy())
 
 
                 epoch_loss = running_loss / len(data_loader.dataset)
-                epoch_acc = correct_preds.double() / len(data_loader.dataset)
-                epoch_auc = roc_auc_score(all_labels, all_preds, multi_class="ovr")
-                epoch_f1 = f1_score(all_labels, np.argmax(all_preds, axis=1), average="macro")
+                epoch_acc = correct_preds.float() / total_preds.float()
+                epoch_auc = roc_auc_score(all_labels, all_preds)
+                # epoch_auc = roc_auc_score(all_labels, all_preds[:, 1])  # assuming the second column represents positive class probabilities
+                binary_preds = (np.array(all_preds) > 0.5).astype(int)
+                epoch_f1 = f1_score(all_labels, binary_preds)
 
                 print(f'{model_name} - {phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f} AUC: {epoch_auc:.4f} F1: {epoch_f1:.4f}')
 
@@ -180,9 +187,12 @@ if k_folds <= 0:
                 inputs = inputs.to(device)
                 labels = labels.to(device)
                 outputs = model(inputs)
-                preds = torch.argmax(outputs, dim=1)
-                probs = outputs.softmax(dim=1).cpu().detach().numpy()
-                print(f'Preds: {preds.cpu().numpy()}, Labels: {labels.cpu().numpy()}, Probabilities: {probs}')
+                # preds = torch.argmax(outputs, dim=1)
+                # probs = outputs.softmax(dim=1).cpu().detach().numpy()
+                probs = torch.sigmoid(outputs).cpu().detach().numpy()
+                binary_preds = (probs > 0.5).astype(int)
+                print(f'Preds: {binary_preds}, Labels: {labels.cpu().numpy()}, Probabilities: {probs}')
+                # print(f'Preds: {preds.cpu().numpy()}, Labels: {labels.cpu().numpy()}, Probabilities: {probs}')
 
 
 
@@ -245,8 +255,13 @@ else:
 
                     epoch_loss = running_loss / len(data_loader.dataset)
                     epoch_acc = correct_preds.double() / len(data_loader.dataset)
-                    epoch_auc = roc_auc_score(all_labels, all_preds, multi_class="ovr")
-                    epoch_f1 = f1_score(all_labels, np.argmax(all_preds, axis=1), average="macro")
+                    # epoch_auc = roc_auc_score(all_labels, all_preds, multi_class="ovr")
+                    # epoch_f1 = f1_score(all_labels, np.argmax(all_preds, axis=1), average="macro")
+                    epoch_auc = roc_auc_score(all_labels, all_preds)
+                    # epoch_auc = roc_auc_score(all_labels, all_preds[:, 1])  # assuming the second column represents positive class probabilities
+                    binary_preds = (all_preds > 0.5).astype(int)
+                    epoch_f1 = f1_score(all_labels, binary_preds)
+                    
 
                     print(f'{model_name} - {phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f} AUC: {epoch_auc:.4f} F1: {epoch_f1:.4f}')
 

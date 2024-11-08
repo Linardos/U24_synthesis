@@ -23,7 +23,7 @@ class NiftiDataset(Dataset):
     def _load_samples(self):
         samples = []
         # Define the labels for each class
-        for label in [['healthy', 0], ['benign', 1], ['cancer', 2]]:
+        for label in [['benign', 0], ['malignant', 1]]:
             class_dir = os.path.join(self.full_data_path, label[0])
             if not os.path.exists(class_dir):
                 print(f"Warning: {class_dir} does not exist. Skipping...")

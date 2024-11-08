@@ -5,7 +5,7 @@ from torchvision import models
 
 class SimpleCNN(nn.Module):
     # for sanity checks, a very very simple architecture.
-    def __init__(self, num_classes=2):
+    def __init__(self, num_classes=1):
         super(SimpleCNN, self).__init__()
         self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1)  # Input channels adjusted to 1
         self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
@@ -22,7 +22,7 @@ class SimpleCNN(nn.Module):
         return x
 
 class Classifier(nn.Module):
-    def __init__(self, base_model, num_classes=3):
+    def __init__(self, base_model, num_classes=1):
         super(Classifier, self).__init__()
         self.base_model = base_model
         if hasattr(self.base_model, 'fc'):
@@ -60,7 +60,7 @@ def modify_input_layer(model, input_channels):
     return model
 
 
-def get_model(model_name, num_classes=3, pretrained=False):
+def get_model(model_name, num_classes=1, pretrained=False):
     if model_name == 'resnet50':
         base_model = models.resnet50(pretrained=pretrained)
     elif model_name == 'resnet101':
