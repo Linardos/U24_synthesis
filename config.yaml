@@ -1,8 +1,10 @@
 root_dir: '/mnt/c/Datasets/SanityThree_train'
+# root_dir: '/mnt/c/Datasets/BCS-DBT-Szymon'
 data_dir: 'original' #'original' # 'stylegan_256x256', 'vqvae' , 'original'
+# data_dir: 'original_sanity_subset' #'original' # 'stylegan_256x256', 'vqvae' , 'original'
 batch_size: 12
-learning_rate: 0.01
-num_epochs: 10
+learning_rate: 0.001
+num_epochs: 100
 pretrained: False
 val_split: 0.2
 sanity_check: True
@@ -20,5 +22,5 @@ model_names:
   # - vgg16
   # - vgg19
 k_folds: 0
-experiment_number: 12  # Add your experiment number here
+experiment_number: 14  # Add your experiment number here
 experiment_name: sanity_threedata #cross_validation

@@ -81,7 +81,9 @@ models = {name: get_model(name, pretrained=config['pretrained']) for name in mod
 for model in models.values():
     model.to(device)
 
-criterion = nn.BCEWithLogitsLoss()
+# criterion = nn.BCEWithLogitsLoss()
+# criterion = nn.CrossEntropyLoss()
+criterion = nn.BCELoss()
 optimizers = {name: torch.optim.Adam(model.parameters(), lr=learning_rate) for name, model in models.items()}
 
 # CSV log file path
@@ -128,6 +130,7 @@ if k_folds <= 0:
 
                 running_loss = 0.0
                 correct_preds = 0
+                total_preds = 0
                 all_labels = []
                 all_preds = []
 
@@ -144,7 +147,9 @@ if k_folds <= 0:
                         # print(f"outputs: {outputs.shape}, dtype: {outputs.dtype}")
                         # print(f"labels: {labels.shape}, dtype: {labels.dtype}")
                         loss = criterion(outputs, labels)
-                        _, preds = torch.max(outputs, 1)
+                        # _, preds = torch.max(outputs, 1)
+                        
+                        preds = (outputs > 0.5).long()  # Binary predictions (0 or 1)
 
                         if phase == 'train':
                             loss.backward()
@@ -152,6 +157,7 @@ if k_folds <= 0:
 
                     running_loss += loss.item() * inputs.size(0)
                     correct_preds += torch.sum(preds == labels.data)  # Count correct predictions
+                    # print(correct_preds)
                     total_preds += labels.size(0)  # Track total number of predictions
                     all_labels.extend(labels.cpu().numpy())
                     all_preds.extend(torch.sigmoid(outputs).cpu().detach().numpy())
@@ -159,7 +165,11 @@ if k_folds <= 0:
 
 
                 epoch_loss = running_loss / len(data_loader.dataset)
-                epoch_acc = correct_preds.float() / total_preds.float()
+                print(type(correct_preds))
+                print(correct_preds)
+                print(type(total_preds))
+                print(total_preds)
+                epoch_acc = correct_preds / total_preds
                 epoch_auc = roc_auc_score(all_labels, all_preds)
                 # epoch_auc = roc_auc_score(all_labels, all_preds[:, 1])  # assuming the second column represents positive class probabilities
                 binary_preds = (np.array(all_preds) > 0.5).astype(int)
@@ -175,7 +185,7 @@ if k_folds <= 0:
                         'phase': phase,
                         'model_name': model_name,
                         'loss': epoch_loss,
-                        'accuracy': epoch_acc.item(),
+                        'accuracy': epoch_acc,
                         'AUC': epoch_auc,
                         'F1': epoch_f1
                     })

@@ -3,6 +3,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
 
+# Weight initialization function
+def weights_init(m):
+    if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+        nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+        if m.bias is not None:
+            nn.init.constant_(m.bias, 0)
+
 class SimpleCNN(nn.Module):
     # for sanity checks, a very very simple architecture.
     def __init__(self, num_classes=1):
@@ -12,6 +19,7 @@ class SimpleCNN(nn.Module):
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
         self.fc1 = nn.Linear(32 * 64 * 64, 128)  # Adjust according to your input size
         self.fc2 = nn.Linear(128, num_classes)
+        self.num_classes = num_classes
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
@@ -19,12 +27,16 @@ class SimpleCNN(nn.Module):
         x = x.view(-1, 32 * 64 * 64)  # Flatten the tensor for the fully connected layer
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
-        return x
+        if self.num_classes==1:
+            return torch.sigmoid(x)
+        else:
+            return x
 
 class Classifier(nn.Module):
     def __init__(self, base_model, num_classes=1):
         super(Classifier, self).__init__()
         self.base_model = base_model
+        self.num_classes = num_classes
         if hasattr(self.base_model, 'fc'):
             in_features = self.base_model.fc.in_features
             self.base_model.fc = nn.Linear(in_features, num_classes)
@@ -37,7 +49,12 @@ class Classifier(nn.Module):
                 self.base_model.classifier = nn.Linear(in_features, num_classes)
 
     def forward(self, x):
-        return self.base_model(x)
+        x = self.base_model(x)
+        
+        if self.num_classes==1:
+            return torch.sigmoid(x)
+        else:
+            return x
 
 def modify_input_layer(model, input_channels):
     if isinstance(model, models.ResNet):
@@ -87,6 +104,9 @@ def get_model(model_name, num_classes=1, pretrained=False):
     # Modify the input layer to accept 1 channel (if applicable)
     if model_name not in ["simplecnn"]:
         base_model = modify_input_layer(base_model, input_channels=1)
+    
+    # Apply custom weight initialization
+    base_model.apply(weights_init)
     
     return Classifier(base_model, num_classes)
 
