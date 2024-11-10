@@ -57,7 +57,7 @@ shutil.copy('config.yaml', experiment_path)
 # Transform with random flipping
 transform = transforms.Compose([
     # transforms.Resize((128, 128)),  # Resize images to fixed dimensions (if needed)
-    transforms.ToTensor(), #scale to 0 1
+    # transforms.ToTensor(), #scale to 0 1
     transforms.Normalize(mean=[0.5], std=[0.5]),  # Normalize the grayscale channel
     transforms.RandomHorizontalFlip(),
     transforms.RandomVerticalFlip()
@@ -174,8 +174,8 @@ if k_folds == 0:
 
         if config['sanity_check']:
             # Sanity check with probability output
-            print("Running a sanity check for predictions and labels with probabilities...")
-            for inputs, labels in val_loader:
+            print("Running a sanity check for predictions and labels with probabilities. Aim of this check is to overfit training data.")
+            for inputs, labels in train_loader:
                 inputs = inputs.to(device)
                 labels = labels.to(device)
                 outputs = model(inputs)
@@ -185,6 +185,7 @@ if k_folds == 0:
                 # binary_preds = (probs > 0.5).astype(int)
                 print(f'Preds: {preds}, Labels: {labels.cpu().numpy()}, Probabilities: {probs}')
                 # print(f'Preds: {preds.cpu().numpy()}, Labels: {labels.cpu().numpy()}, Probabilities: {probs}')
+                break
 
 else:
     # k-Fold cross-validation
