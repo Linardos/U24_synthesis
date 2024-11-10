@@ -12,7 +12,7 @@ def weights_init(m):
 
 class SimpleCNN(nn.Module):
     # for sanity checks, a very very simple architecture.
-    def __init__(self, num_classes=1):
+    def __init__(self, num_classes=2):
         super(SimpleCNN, self).__init__()
         self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1)  # Input channels adjusted to 1
         self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
@@ -27,13 +27,13 @@ class SimpleCNN(nn.Module):
         x = x.view(-1, 32 * 64 * 64)  # Flatten the tensor for the fully connected layer
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
-        if self.num_classes==1:
-            return torch.sigmoid(x)
-        else:
-            return x
+        # if self.num_classes==1:
+        #     return torch.sigmoid(x)
+        # else:
+        return x
 
 class Classifier(nn.Module):
-    def __init__(self, base_model, num_classes=1):
+    def __init__(self, base_model, num_classes=2):
         super(Classifier, self).__init__()
         self.base_model = base_model
         self.num_classes = num_classes
@@ -51,10 +51,10 @@ class Classifier(nn.Module):
     def forward(self, x):
         x = self.base_model(x)
         
-        if self.num_classes==1:
-            return torch.sigmoid(x)
-        else:
-            return x
+        # if self.num_classes==1:
+        #     return torch.sigmoid(x)
+        # else:
+        return x
 
 def modify_input_layer(model, input_channels):
     if isinstance(model, models.ResNet):
@@ -77,7 +77,7 @@ def modify_input_layer(model, input_channels):
     return model
 
 
-def get_model(model_name, num_classes=1, pretrained=False):
+def get_model(model_name, num_classes=2, pretrained=False):
     if model_name == 'resnet50':
         base_model = models.resnet50(pretrained=pretrained)
     elif model_name == 'resnet101':

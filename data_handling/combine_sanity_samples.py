@@ -10,8 +10,12 @@ ddsm_train_path = "/mnt/c/Datasets/DDSM/DDSM_clean/train"
 cmmd_train_path = "/mnt/c/Datasets/CMMD/CMMD_clean/train"
 bcs_dbt_path = "/mnt/c/Datasets/BCS-DBT-Szymon/original_256x256"
 
-# Destination path for sanity dataset
-sanity_path = "/mnt/c/Datasets/SanityThree_train"
+# Destination path for sanity dataset / parameters for sanity
+sanity_path = "/mnt/c/Datasets/SanityDDSM_train"
+DDSM = True
+CMMD = False
+BCS = False
+sample_size = 100
 
 # Target dimensions for resizing
 target_dims = (256, 256)
@@ -63,13 +67,16 @@ def create_sanity_data(source_root, dest_root, sanity_sample_size=50):
                     print(f"Copied and resized {source_file} to {dest_file}")
 
 # Process each dataset
-print("Creating sanity dataset from DDSM...")
-create_sanity_data(ddsm_train_path, sanity_path, sanity_sample_size=50)
+if DDSM:
+    print("Creating sanity dataset from DDSM...")
+    create_sanity_data(ddsm_train_path, sanity_path, sanity_sample_size=sample_size)
 
-print("Creating sanity dataset from CMMD...")
-create_sanity_data(cmmd_train_path, sanity_path, sanity_sample_size=50)
+if CMMD:
+    print("Creating sanity dataset from CMMD...")
+    create_sanity_data(cmmd_train_path, sanity_path, sanity_sample_size=sample_size)
 
-print("Creating sanity dataset from BCS-DBT...")
-create_sanity_data(bcs_dbt_path, sanity_path, sanity_sample_size=50)
+if BCS:
+    print("Creating sanity dataset from BCS-DBT...")
+    create_sanity_data(bcs_dbt_path, sanity_path, sanity_sample_size=sample_size)
 
 print("Sanity dataset has been created successfully!")

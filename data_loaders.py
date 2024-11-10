@@ -63,18 +63,18 @@ class NiftiDataset(Dataset):
         return img_tensor, label
 
 # Example usage
-transform = transforms.Compose([
-    # transforms.Resize((128, 128)),  # Resize images to fixed dimensions (if needed)
-    transforms.Normalize(mean=[0.5], std=[0.5]),  # Normalize the grayscale channel
-    transforms.RandomHorizontalFlip(),
-    transforms.RandomVerticalFlip()
-])
+# transform = transforms.Compose([
+#     # transforms.Resize((128, 128)),  # Resize images to fixed dimensions (if needed)
+#     transforms.Normalize(mean=[0.5], std=[0.5]),  # Normalize the grayscale channel
+#     transforms.RandomHorizontalFlip(),
+#     transforms.RandomVerticalFlip()
+# ])
 
-dataset = NiftiDataset(full_data_path=full_data_path, transform=transform)
-dataloader = DataLoader(dataset, batch_size=4, shuffle=True)
+# dataset = NiftiDataset(full_data_path=full_data_path, transform=transform)
+# dataloader = DataLoader(dataset, batch_size=4, shuffle=True)
 
-# Iterate through the dataset (for demonstration purposes)
-for images, labels in dataloader:
-    print("Images shape:", images.shape)
-    print("Labels:", labels)
-    break  # Remove this line to go through the whole dataset
+# # Iterate through the dataset (for demonstration purposes)
+# for images, labels in dataloader:
+#     print("Images shape:", images.shape)
+#     print("Labels:", labels)
+#     break  # Remove this line to go through the whole dataset
