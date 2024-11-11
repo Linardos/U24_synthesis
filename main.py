@@ -5,7 +5,10 @@ import torch
 import torch.nn as nn
 import numpy as np
 from torch.utils.data import DataLoader, random_split, Subset
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchvision import transforms
+from torchvision.utils import make_grid, save_image
+import matplotlib.pyplot as plt
 from sklearn.model_selection import StratifiedKFold, train_test_split, KFold
 from models import get_model  # Assuming get_model is defined in models.py
 from data_loaders import NiftiDataset  # Assuming NiftiDataset is defined in data_loaders_S.py
@@ -35,6 +38,7 @@ experiment_number = config['experiment_number']
 experiment_name = config['experiment_name']
 resize_check = config['resize_check']
 k_folds = config['k_folds']
+store_sample_per_epoch = config['store_sample_per_epoch']
 
 # Extract the final folder name from the data directory
 final_folder = data_dir
@@ -89,7 +93,7 @@ for model in models.values():
 
 criterion = nn.CrossEntropyLoss()
 optimizers = {name: torch.optim.Adam(model.parameters(), lr=learning_rate) for name, model in models.items()}
-
+schedulers = {name: CosineAnnealingLR(optimizer, T_max=num_epochs) for name, optimizer in optimizers.items()}
 # CSV log file path
 csv_log_file = os.path.join(experiment_path, 'logs.csv')
 
@@ -116,6 +120,7 @@ if k_folds == 0:
 
     # Training and evaluation loop
     for epoch in range(num_epochs):
+        batch_saved = False  # Visualize images and save only the first batch in each epoch
         print(f'Epoch {epoch + 1}/{num_epochs}')
         print('-' * 10)
 
@@ -132,6 +137,7 @@ if k_folds == 0:
                 correct_preds = 0
                 all_labels = []
                 all_preds = []
+
 
                 for inputs, labels in tqdm(data_loader):
                     inputs = inputs.to(device)
@@ -154,6 +160,21 @@ if k_folds == 0:
                     all_labels.extend(labels.cpu().numpy())
                     all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy()[:, 1])
 
+                    # Save a grid of images for visual inspection (one batch per epoch)
+                    if not batch_saved:
+                        malignant_images = inputs[labels == 1][:6]  # Select up to 6 malignant samples
+                        benign_images = inputs[labels == 0][:6]     # Select up to 6 benign samples
+                        
+                        if len(malignant_images) == 6 and len(benign_images) == 6:
+                            grid_images = torch.cat((benign_images, malignant_images), 0)  # Stack benign and malignant
+                            grid = make_grid(grid_images, nrow=6, padding=2, normalize=True)
+
+                            # Save grid as an image file
+                            img_path = os.path.join(experiment_path, f'epoch_{epoch + 1}_batch.png')
+                            save_image(grid, img_path)
+                            print(f'Saved image grid for epoch {epoch + 1} to {img_path}')
+                            batch_saved = True  # Only save the first batch of each epoch
+
                 epoch_loss = running_loss / len(data_loader.dataset)
                 epoch_acc = correct_preds.double() / len(data_loader.dataset)
                 epoch_auc = roc_auc_score(all_labels, all_preds)
@@ -171,6 +192,9 @@ if k_folds == 0:
                         'accuracy': epoch_acc.item(),
                         'AUC': epoch_auc
                     })
+
+        for scheduler in schedulers.values():
+            scheduler.step()
 
         if config['sanity_check']:
             # Sanity check with probability output
