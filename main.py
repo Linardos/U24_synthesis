@@ -36,9 +36,9 @@ val_split = config['val_split']
 model_names = config['model_names']
 experiment_number = config['experiment_number']
 experiment_name = config['experiment_name']
-resize_check = config['resize_check']
 k_folds = config['k_folds']
 store_sample_per_epoch = config['store_sample_per_epoch']
+transform_check = config['transform_check']
 
 # Extract the final folder name from the data directory
 final_folder = data_dir
@@ -59,13 +59,17 @@ shutil.copy('config.yaml', experiment_path)
 
 
 # Transform with random flipping
-transform = transforms.Compose([
-    # transforms.Resize((128, 128)),  # Resize images to fixed dimensions (if needed)
-    # transforms.ToTensor(), #scale to 0 1
-    transforms.Normalize(mean=[0.5], std=[0.5]),  # Normalize the grayscale channel
-    transforms.RandomHorizontalFlip(),
-    transforms.RandomVerticalFlip()
-])
+if transform_check:
+    transform = transforms.Compose([
+        # transforms.Resize((128, 128)),  # Resize images to fixed dimensions (if needed)
+        # transforms.ToTensor(), #scale to 0 1
+        transforms.Normalize(mean=[0.5], std=[0.5]),  # Normalize the grayscale channel
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip()
+    ])
+else:
+    print("Warning: no transformations are applied")
+    transform = None
 
 # Load the dataset
 print(f"Loading data from {full_data_path}")
