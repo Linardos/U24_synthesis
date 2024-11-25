@@ -8,9 +8,27 @@ from skimage.transform import resize
 ddsm_train_path = "/mnt/c/Datasets/DDSM/DDSM_clean/train"
 cmmd_train_path = "/mnt/c/Datasets/CMMD/CMMD_clean/train"
 bcs_dbt_path = "/mnt/c/Datasets/BCS-DBT-Szymon/original_256x256"
+inbreast_train_path = "/mnt/c/Datasets/inbreast/inbreast_clean/train"
 
+# SET PARAMETERS HERE ------------------
 # Destination path
-destination_path = "/mnt/c/Datasets/ThreeDataDM_train"
+destination_path = "/mnt/c/Datasets/TwoDataDM_train"
+# destination_path = "/mnt/c/Datasets/ThreeDataDM_train"
+
+# Select  which datasets to combine
+DDSM = True
+CMMD = True
+BCS = True
+inbreast = True
+
+# ---------------------------------------
+
+
+# Print flags for verification
+print(f"DDSM: {DDSM}")
+print(f"CMMD: {CMMD}")
+print(f"BCS: {BCS}")
+print(f"InBreast: {inbreast}")
 
 # Target dimensions
 target_dims = (256, 256)
@@ -45,11 +63,22 @@ def copy_and_resize_data(source_root, dest_root):
                 print(f"Copied and resized {source_file} to {dest_file}")
 
 # Copy and resize for each dataset
-print("Processing DDSM...")
-copy_and_resize_data(ddsm_train_path, destination_path)
-print("Processing CMMD...")
-copy_and_resize_data(cmmd_train_path, destination_path)
-print("Processing BCS-DBT...")
-copy_and_resize_data(bcs_dbt_path, destination_path)
+# print("Processing DDSM...")
+# copy_and_resize_data(ddsm_train_path, destination_path)
+if DDSM:
+    print("Processing DDSM...")
+    copy_and_resize_data(ddsm_train_path, destination_path)
+
+if CMMD:
+    print("Processing CMMD...")
+    copy_and_resize_data(cmmd_train_path, destination_path)
+
+if BCS:
+    print("Processing BCS-DBT...")
+    copy_and_resize_data(bcs_dbt_path, destination_path)
+
+if inbreast:
+    print("Processing InBreast...")
+    copy_and_resize_data(inbreast_train_path, destination_path)
 
 print("All datasets have been processed and copied to the destination folder.")

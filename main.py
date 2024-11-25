@@ -31,6 +31,7 @@ data_dir = config['data_dir']
 full_data_path = os.path.join(root_dir, data_dir)
 batch_size = config['batch_size']
 learning_rate = config['learning_rate']
+weight_decay = config['weight_decay']
 num_epochs = config['num_epochs']
 val_split = config['val_split']
 model_names = config['model_names']
@@ -39,6 +40,10 @@ experiment_name = config['experiment_name']
 k_folds = config['k_folds']
 store_sample_per_epoch = config['store_sample_per_epoch']
 transform_check = config['transform_check']
+
+early_stopping_patience = config['early_stopping_patience']
+best_val_loss = float('inf')
+no_improvement_epochs = 0
 
 # Extract the final folder name from the data directory
 final_folder = data_dir
@@ -59,12 +64,23 @@ shutil.copy('config.yaml', experiment_path)
 
 
 # Transform with random flipping
-if transform_check:
+if transform_check =='basic':
     transform = transforms.Compose([
         # transforms.Resize((128, 128)),  # Resize images to fixed dimensions (if needed)
         # transforms.ToTensor(), #scale to 0 1
         transforms.Normalize(mean=[0.5], std=[0.5]),  # Normalize the grayscale channel
         transforms.RandomHorizontalFlip(),
+        transforms.RandomVerticalFlip()
+    ])
+elif transform_check =='augmentations':
+        transform = transforms.Compose([
+        # transforms.Resize((128, 128)),  # Resize images to fixed dimensions (if needed)
+        # transforms.ToTensor(), #scale to 0 1
+        transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),
+        transforms.RandomRotation(degrees=15),
+        transforms.Normalize(mean=[0.5], std=[0.5]),  # Normalize the grayscale channel
+        transforms.RandomHorizontalFlip(),
+        transforms.Lambda(lambda x: x + torch.randn_like(x) * 0.05),  # Add Gaussian noise
         transforms.RandomVerticalFlip()
     ])
 else:
@@ -96,7 +112,7 @@ for model in models.values():
     model.to(device)
 
 criterion = nn.CrossEntropyLoss()
-optimizers = {name: torch.optim.Adam(model.parameters(), lr=learning_rate) for name, model in models.items()}
+optimizers = {name: torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay) for name, model in models.items()}
 schedulers = {name: CosineAnnealingLR(optimizer, T_max=num_epochs) for name, optimizer in optimizers.items()}
 # CSV log file path
 csv_log_file = os.path.join(experiment_path, 'logs.csv')
@@ -197,8 +213,20 @@ if k_folds == 0:
                         'AUC': epoch_auc
                     })
 
+                # Early stopping check
+                if phase == 'val':
+                    if epoch_loss < best_val_loss:
+                        best_val_loss = epoch_loss
+                        no_improvement_epochs = 0  # Reset counter if there’s improvement
+                    else:
+                        no_improvement_epochs += 1  # Increment counter if no improvement
+
         for scheduler in schedulers.values():
             scheduler.step()
+        
+        if no_improvement_epochs >= early_stopping_patience:
+            print(f"Early stopping triggered. No improvement for {early_stopping_patience} epochs.")
+            break
 
         if config['sanity_check']:
             # Sanity check with probability output

@@ -1,13 +1,16 @@
 # root_dir: '/mnt/c/Datasets/BCS-DBT-Szymon'
-root_dir: '/mnt/c/Datasets/SanityBCS_train'
+# root_dir: '/mnt/c/Datasets/SanityBCS_train'
 # root_dir: '/mnt/c/Datasets/SanityCMMD_train'
 # root_dir: '/mnt/c/Datasets/SanityDDSM_train'
+root_dir: '/mnt/c/Datasets/SanityInBreast_train'
 # root_dir: '/mnt/c/Datasets/SanityThree_train'
 # root_dir: '/mnt/c/Datasets/ThreeDataDM_train'
 data_dir: 'original' #'original' # 'stylegan_256x256', 'vqvae' , 'original'
 # data_dir: 'original_sanity_subset' #'original' # 'stylegan_256x256', 'vqvae' , 'original'
 batch_size: 24
 learning_rate: 0.001
+weight_decay: 0.00001
+early_stopping_patience: 15
 num_epochs: 100
 pretrained: False
 val_split: 0.2
@@ -25,11 +28,12 @@ model_names:
   # - vgg19
 k_folds: 0
 sanity_check: True
-transform_check: True # apply data preprocessing
+transform_check: basic # "basic" to just apply data preprocessing
 store_sample_per_epoch: True # to visualize images
-experiment_number: 26  # Add your experiment number here
-experiment_name: sanity_BCSdata 
+experiment_number: 30 # Add your experiment number here
+# experiment_name: sanity_BCSdata 
 # experiment_name: sanity_CMMDdata
 # experiment_name: sanity_DDSMdata 
+experiment_name: sanity_inbreast
 # experiment_name: sanity_Three
-# experiment_name: ThreeDataDM
+# experiment_name: ThreeDataDM_augmentations

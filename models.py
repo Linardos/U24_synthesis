@@ -33,10 +33,11 @@ class SimpleCNN(nn.Module):
         return x
 
 class Classifier(nn.Module):
-    def __init__(self, base_model, num_classes=2):
+    def __init__(self, base_model, num_classes=2, dropout_prob=0.5):
         super(Classifier, self).__init__()
         self.base_model = base_model
         self.num_classes = num_classes
+        self.dropout = nn.Dropout(p=dropout_prob)
         if hasattr(self.base_model, 'fc'):
             in_features = self.base_model.fc.in_features
             self.base_model.fc = nn.Linear(in_features, num_classes)
