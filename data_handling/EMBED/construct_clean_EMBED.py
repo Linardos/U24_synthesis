@@ -5,7 +5,8 @@ import numpy as np
 from pydicom import dcmread
 from nibabel import Nifti1Image
 from sklearn.model_selection import train_test_split
-
+import multiprocessing as mp
+import tqdm
 # Load CSV
 csv_path = "/mnt/d/Datasets/EMBED/tables/EMBED_cleaned_metadata.csv"
 data = pd.read_csv(csv_path)
@@ -52,28 +53,64 @@ def convert_dicom_to_nifti(dicom_path, output_path):
         print(f"Error converting {dicom_path} to NIfTI: {e}")
 
 # Helper function to process files
-def process_files(df, split):
-    for _, row in df.iterrows():
-        src = os.path.join(base_dir, os.path.relpath(row["anon_dicom_path"], "/mnt/NAS2/mammo/anon_dicom/"))
-        category = row["category"]
+# def process_files(df, split):
+#     for _, row in tqdm(df.iterrows(), total=len(df), desc=f"Processing {split} files"):
+#         src = os.path.join(base_dir, os.path.relpath(row["anon_dicom_path"], "/mnt/NAS2/mammo/anon_dicom/"))
+#         category = row["category"]
 
-        if not os.path.isfile(src):
-            print(f"File not found: {src}")
-            continue
+#         if not os.path.isfile(src):
+#             print(f"File not found: {src}")
+#             continue
 
-        # Create a folder for the DICOM file with its name
-        dicom_name = os.path.splitext(os.path.basename(src))[0]  # Extract file name without extension
-        dest_folder = os.path.join(output_dir, split, category, dicom_name)
-        os.makedirs(dest_folder, exist_ok=True)
+#         # Create a folder for the DICOM file with its name
+#         dicom_name = os.path.splitext(os.path.basename(src))[0]  # Extract file name without extension
+#         dest_folder = os.path.join(output_dir, split, category, dicom_name)
+#         os.makedirs(dest_folder, exist_ok=True)
 
-        # Convert and save the NIfTI file in the folder
-        nifti_path = os.path.join(dest_folder, "slice.nii.gz")
+#         # Convert and save the NIfTI file in the folder
+#         nifti_path = os.path.join(dest_folder, "slice.nii.gz")
+#         if os.path.exists(nifti_path):
+#             print(f"Skipping existing file: {nifti_path}")
+#             continue
+#         convert_dicom_to_nifti(src, nifti_path)
+
+def process_single_file(row, split):
+    src = os.path.join(base_dir, os.path.relpath(row["anon_dicom_path"], "/mnt/NAS2/mammo/anon_dicom/"))
+    category = row["category"]
+
+    if not os.path.isfile(src):
+        print(f"File not found: {src}")
+        return
+
+    # Create a folder for the DICOM file with its name
+    dicom_name = os.path.splitext(os.path.basename(src))[0]
+    dest_folder = os.path.join(output_dir, split, category, dicom_name)
+    os.makedirs(dest_folder, exist_ok=True)
+
+    # Convert and save the NIfTI file
+    nifti_path = os.path.join(dest_folder, "slice.nii.gz")
+    if os.path.exists(nifti_path):
+        print(f"Skipping existing file: {nifti_path}")
+    else:
         convert_dicom_to_nifti(src, nifti_path)
 
-# Process train and test files
+def process_files_parallel(df, split):
+    # with mp.Pool(processes=mp.cpu_count()) as pool:
+    #     results = list(tqdm(pool.imap_unordered(process_single_file, [(row, split) for _, row in df.iterrows()]), total=len(df), desc=f"Processing {split} files"))
+
+    with mp.Pool(processes=mp.cpu_count()) as pool:
+        pool.starmap(process_single_file, [(row, split) for _, row in df.iterrows()])
+
+# Process train and test files in parallel
 print("Processing train files...")
-process_files(train, "train")
+process_files_parallel(train, "train")
 print("Processing test files...")
-process_files(test, "test")
+process_files_parallel(test, "test")
+
+# # Process train and test files
+# print("Processing train files...")
+# process_files(train, "train")
+# print("Processing test files...")
+# process_files(test, "test")
 
 print("Dataset reorganization and conversion complete!")
