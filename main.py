@@ -16,11 +16,16 @@ from tqdm import tqdm
 from sklearn.metrics import roc_auc_score
 import shutil
 import csv  # Import the csv module
+import random
+from scipy.ndimage import histogram
+from scipy.interpolate import interp1d
+
 
 # Set random seed for reproducibility
 random_seed = 42
+np.random.seed(random_seed)
 torch.manual_seed(random_seed)
-
+random.seed(random_seed)
 # Load configuration from config.yaml
 with open('config.yaml', 'r') as f:
     config = yaml.safe_load(f)
@@ -63,31 +68,97 @@ if not os.path.exists(experiment_path):
 shutil.copy('config.yaml', experiment_path)
 
 
+def compute_reference_histogram(dataset, num_samples=50):
+    all_pixels = []
+
+    # Extract pixel data from a subset of images
+    for i in range(min(num_samples, len(dataset))):
+        image, _ = dataset[i]  # Assuming dataset[i] returns (image, label)
+        all_pixels.extend(image.flatten().tolist())
+
+    # Compute histogram from all collected pixel values
+    hist, bin_edges = np.histogram(all_pixels, bins=256, range=(0, 1), density=True)
+    ref_cdf = hist.cumsum() / hist.sum()  # Normalize CDF to [0,1]
+    
+    return ref_cdf, bin_edges
+
+# Min-Max Normalization
+def min_max_normalization(tensor):
+    min_val = torch.min(tensor)
+    max_val = torch.max(tensor)
+    return (tensor - min_val) / (max_val - min_val + 1e-8)  # Avoid division by zero
+
+# Histogram Standardization using a reference CDF
+def histogram_standardization(img_tensor, ref_cdf, ref_bins):
+    img_np = img_tensor.numpy().flatten()
+    img_hist, img_bins = np.histogram(img_np, bins=256, range=(0, 1), density=True)
+    img_cdf = np.cumsum(img_hist) / img_hist.sum()
+
+    interp_values = np.interp(img_cdf, ref_cdf, ref_bins[:-1])
+    img_standardized = np.interp(img_np, img_bins[:-1], interp_values)
+    
+    return torch.tensor(img_standardized.reshape(img_tensor.shape), dtype=torch.float32)
+
+# Compute reference histogram from a few samples
+def compute_reference_histogram(sample_images):
+    all_pixels = np.concatenate([img.numpy().flatten() for img in sample_images])
+    hist, bin_edges = np.histogram(all_pixels, bins=256, range=(0, 1), density=True)
+    ref_cdf = np.cumsum(hist) / hist.sum()
+    return ref_cdf, bin_edges
+
+def min_max_normalization(tensor):
+    min_val = torch.min(tensor)
+    max_val = torch.max(tensor)
+    normalized_tensor = (tensor - min_val) / (max_val - min_val)
+    return normalized_tensor
+
+# Load the dataset to compute ref histogram
+print(f"Loading data from {full_data_path}")
+dataset = NiftiDataset(full_data_path=full_data_path, transform=None)  # Load without transform initially
+# print(f"Dataset contains {len(dataset)} samples.")
+# # Compute the reference histogram from the first 50 images
+# sample_images = [dataset[i][0] for i in range(min(50, len(dataset)))]  # Ensure we don't exceed dataset length
+# ref_cdf, ref_bins = compute_reference_histogram(sample_images)
+
+# Load a few sample images for reference histogram
+sample_images = [dataset[i][0] for i in range(50)]  # Assuming dataset[i] returns (image, label)
+ref_cdf, ref_bins = compute_reference_histogram(sample_images)
+
+print("Reference histogram computed.")
+
+
 # Transform with random flipping
 if transform_check =='basic':
+
     transform = transforms.Compose([
-        # transforms.Resize((128, 128)),  # Resize images to fixed dimensions (if needed)
-        # transforms.ToTensor(), #scale to 0 1
+        transforms.Lambda(lambda x: min_max_normalization(x)),  # Min-max normalization
+        # transforms.Lambda(lambda x: histogram_standardization(x, ref_cdf, ref_bins)),  # Histogram Standardization
         transforms.Normalize(mean=[0.5], std=[0.5]),  # Normalize the grayscale channel
         transforms.RandomHorizontalFlip(),
-        transforms.RandomVerticalFlip()
+        transforms.RandomVerticalFlip(),
     ])
+    # transform = transforms.Compose([
+    #     # transforms.Lambda(lambda x: match_histogram(x, ref_cdf, ref_bins)),  # Apply fixed histogram standardization
+    #     transforms.Normalize(mean=[0.5], std=[0.5]),  # Normalize to [-1, 1] range
+    #     transforms.RandomHorizontalFlip(),
+    #     transforms.RandomVerticalFlip()
+    # ])
 elif transform_check =='augmentations':
         transform = transforms.Compose([
-        # transforms.Resize((128, 128)),  # Resize images to fixed dimensions (if needed)
-        # transforms.ToTensor(), #scale to 0 1
         transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),
         transforms.RandomRotation(degrees=15),
-        transforms.Normalize(mean=[0.5], std=[0.5]),  # Normalize the grayscale channel
+        # transforms.Normalize(mean=[0.5], std=[0.5]),  # Normalize the grayscale channel
+        transforms.Lambda(lambda x: min_max_normalization(x)),  # Apply min-max normalization
+        transforms.Lambda(lambda x: match_histogram(x, ref_cdf, ref_bins)),  # Apply histogram standardization
+        transforms.Lambda(lambda x: apply_gaussian_denoise(x)),
         transforms.RandomHorizontalFlip(),
-        transforms.Lambda(lambda x: x + torch.randn_like(x) * 0.05),  # Add Gaussian noise
         transforms.RandomVerticalFlip()
     ])
 else:
     print("Warning: no transformations are applied")
     transform = None
 
-# Load the dataset
+# Load the dataset with transformations applied
 print(f"Loading data from {full_data_path}")
 dataset = NiftiDataset(full_data_path=full_data_path, transform=transform)
 

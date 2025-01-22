@@ -7,6 +7,7 @@ from nibabel import Nifti1Image
 from sklearn.model_selection import train_test_split
 import multiprocessing as mp
 import tqdm
+from scipy.ndimage import zoom
 # Load CSV
 csv_path = "/mnt/d/Datasets/EMBED/tables/EMBED_cleaned_metadata.csv"
 data = pd.read_csv(csv_path)
@@ -36,11 +37,22 @@ for split in ["train", "test"]:
     print(f"{split.capitalize()} directories created!")
 
 # DICOM-to-NIfTI conversion function
-def convert_dicom_to_nifti(dicom_path, output_path):
+def convert_dicom_to_nifti(dicom_path, output_path, target_size=(256, 256)):
     try:
         dicom_data = dcmread(dicom_path)
         pixel_array = dicom_data.pixel_array  # Extract pixel data
-        volume = np.expand_dims(pixel_array, axis=-1)  # Add a dimension for NIfTI format
+
+        # Get original size
+        original_size = pixel_array.shape
+
+        # Compute the resize scaling factor
+        scale_factors = (target_size[0] / original_size[0], target_size[1] / original_size[1])
+
+        # Resize the image using scipy's zoom function
+        resized_image = zoom(pixel_array, scale_factors, order=3)  # Bicubic interpolation
+
+        # Expand dimensions for NIfTI format
+        volume = np.expand_dims(resized_image, axis=-1)
 
         # Create a simple affine matrix
         affine = np.eye(4)

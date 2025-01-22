@@ -1,10 +1,10 @@
-# root_dir: '/mnt/c/Datasets/BCS-DBT-Szymon'
-# root_dir: '/mnt/c/Datasets/SanityBCS_train'
-# root_dir: '/mnt/c/Datasets/SanityCMMD_train'
-# root_dir: '/mnt/c/Datasets/SanityDDSM_train'
-root_dir: '/mnt/c/Datasets/SanityInBreast_train'
-# root_dir: '/mnt/c/Datasets/SanityThree_train'
-# root_dir: '/mnt/c/Datasets/ThreeDataDM_train'
+# root_dir: '/mnt/d/Datasets/BCS-DBT-Szymon'
+# root_dir: '/mnt/d/Datasets/SanityBCS_train'
+# root_dir: '/mnt/d/Datasets/SanityCMMD_train'
+# root_dir: '/mnt/d/Datasets/SanityDDSM_train'
+# root_dir: '/mnt/d/Datasets/SanityInBreast_train'
+# root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean'
+root_dir: '/mnt/d/Datasets/EMBED/sanity_EMBED'
 data_dir: 'original' #'original' # 'stylegan_256x256', 'vqvae' , 'original'
 # data_dir: 'original_sanity_subset' #'original' # 'stylegan_256x256', 'vqvae' , 'original'
 batch_size: 24
@@ -34,6 +34,6 @@ experiment_number: 30 # Add your experiment number here
 # experiment_name: sanity_BCSdata 
 # experiment_name: sanity_CMMDdata
 # experiment_name: sanity_DDSMdata 
-experiment_name: sanity_inbreast
-# experiment_name: sanity_Three
+# experiment_name: sanity_inbreast
+experiment_name: sanity_EMBED
 # experiment_name: ThreeDataDM_augmentations
