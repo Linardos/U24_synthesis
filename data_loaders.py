@@ -14,57 +14,114 @@ root_dir = config['root_dir']
 data_dir = config['data_dir']
 full_data_path = os.path.join(root_dir, data_dir)
 
-class NiftiDataset(Dataset):
-    def __init__(self, full_data_path, transform=None):
-        self.full_data_path = full_data_path
-        self.transform = transform
-        self.samples = self._load_samples()
+if config['num_classes']>2:
+    class NiftiDataset(Dataset):
+        def __init__(self, full_data_path, transform=None):
+            self.full_data_path = full_data_path
+            self.transform = transform
+            self.samples = self._load_samples()
 
-    def _load_samples(self):
-        samples = []
-        # Define the labels for each class
-        for label in [['benign', 0], ['malignant', 1]]:
-            class_dir = os.path.join(self.full_data_path, label[0])
-            if not os.path.exists(class_dir):
-                print(f"Warning: {class_dir} does not exist. Skipping...")
-                continue
+        def _load_samples(self):
+            samples = []
+            # Define the labels for each class
+            class_labels = {
+                'benign': 0,
+                'malignant': 1,
+                'probably_benign': 2,
+                'suspicious': 3
+            }
 
-            # Iterate over each subdirectory within the class directory
-            for subdir in os.listdir(class_dir):
-                subdir_path = os.path.join(class_dir, subdir)
+            for class_name, label in class_labels.items():
+                class_dir = os.path.join(self.full_data_path, class_name)
+                if not os.path.exists(class_dir):
+                    print(f"Warning: {class_dir} does not exist. Skipping...")
+                    continue
 
-                # Find any .nii.gz file within the subdir
-                nii_files = [f for f in os.listdir(subdir_path) if f.endswith('.nii.gz')]
-                if nii_files:
-                    file_path = os.path.join(subdir_path, nii_files[0])  # Take the first .nii.gz file found
-                    samples.append((file_path, label[1]))
-                else:
-                    print(f"No .nii.gz file found in {subdir_path}")
+                # Iterate over each subdirectory within the class directory
+                for subdir in os.listdir(class_dir):
+                    subdir_path = os.path.join(class_dir, subdir)
 
-        return samples
+                    # Find any .nii.gz file within the subdir
+                    nii_files = [f for f in os.listdir(subdir_path) if f.endswith('.nii.gz')]
+                    if nii_files:
+                        file_path = os.path.join(subdir_path, nii_files[0])  # Take the first .nii.gz file found
+                        samples.append((file_path, label))
+                    else:
+                        print(f"No .nii.gz file found in {subdir_path}")
 
-    def __len__(self):
-        return len(self.samples)
+            return samples
 
-    def __getitem__(self, idx):
-        file_path, label = self.samples[idx]
-        nifti_img = nib.load(file_path)
-        img_array = nifti_img.get_fdata()
-        img_tensor = torch.tensor(img_array, dtype=torch.float32)  # Convert to tensor
-        img_tensor = img_tensor.unsqueeze(0)  # Add channel dimension: [1, H, W, D]
+        def __len__(self):
+            return len(self.samples)
 
-        # Check if the tensor has an extra singleton dimension at the end and remove it
-        if img_tensor.shape[-1] == 1:
-            img_tensor = img_tensor.squeeze(-1)  # Remove singleton dimension at the end
+        def __getitem__(self, idx):
+            file_path, label = self.samples[idx]
+            nifti_img = nib.load(file_path)
+            img_array = nifti_img.get_fdata()
+            img_tensor = torch.tensor(img_array, dtype=torch.float32)  # Convert to tensor
+            img_tensor = img_tensor.unsqueeze(0)  # Add channel dimension: [1, H, W, D]
 
-        if self.transform:
-            img_tensor = self.transform(img_tensor)
+            # Check if the tensor has an extra singleton dimension at the end and remove it
+            if img_tensor.shape[-1] == 1:
+                img_tensor = img_tensor.squeeze(-1)  # Remove singleton dimension at the end
 
-        return img_tensor, label
+            if self.transform:
+                img_tensor = self.transform(img_tensor)
+
+            return img_tensor, label
+
+else:
+    class NiftiDataset(Dataset):
+        def __init__(self, full_data_path, transform=None):
+            self.full_data_path = full_data_path
+            self.transform = transform
+            self.samples = self._load_samples()
+
+        def _load_samples(self):
+            samples = []
+            # Define the labels for each class
+            for label in [['benign', 0], ['malignant', 1]]:
+                class_dir = os.path.join(self.full_data_path, label[0])
+                if not os.path.exists(class_dir):
+                    print(f"Warning: {class_dir} does not exist. Skipping...")
+                    continue
+
+                # Iterate over each subdirectory within the class directory
+                for subdir in os.listdir(class_dir):
+                    subdir_path = os.path.join(class_dir, subdir)
+
+                    # Find any .nii.gz file within the subdir
+                    nii_files = [f for f in os.listdir(subdir_path) if f.endswith('.nii.gz')]
+                    if nii_files:
+                        file_path = os.path.join(subdir_path, nii_files[0])  # Take the first .nii.gz file found
+                        samples.append((file_path, label[1]))
+                    else:
+                        print(f"No .nii.gz file found in {subdir_path}")
+
+            return samples
+
+        def __len__(self):
+            return len(self.samples)
+
+        def __getitem__(self, idx):
+            file_path, label = self.samples[idx]
+            nifti_img = nib.load(file_path)
+            img_array = nifti_img.get_fdata()
+            img_tensor = torch.tensor(img_array, dtype=torch.float32)  # Convert to tensor
+            img_tensor = img_tensor.unsqueeze(0)  # Add channel dimension: [1, H, W, D]
+
+            # Check if the tensor has an extra singleton dimension at the end and remove it
+            if img_tensor.shape[-1] == 1:
+                img_tensor = img_tensor.squeeze(-1)  # Remove singleton dimension at the end
+
+            if self.transform:
+                img_tensor = self.transform(img_tensor)
+
+            return img_tensor, label
+
 
 # Example usage
 # transform = transforms.Compose([
-#     # transforms.Resize((128, 128)),  # Resize images to fixed dimensions (if needed)
 #     transforms.Normalize(mean=[0.5], std=[0.5]),  # Normalize the grayscale channel
 #     transforms.RandomHorizontalFlip(),
 #     transforms.RandomVerticalFlip()

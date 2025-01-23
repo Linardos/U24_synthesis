@@ -121,10 +121,10 @@ dataset = NiftiDataset(full_data_path=full_data_path, transform=None)  # Load wi
 # ref_cdf, ref_bins = compute_reference_histogram(sample_images)
 
 # Load a few sample images for reference histogram
-sample_images = [dataset[i][0] for i in range(50)]  # Assuming dataset[i] returns (image, label)
-ref_cdf, ref_bins = compute_reference_histogram(sample_images)
+# sample_images = [dataset[i][0] for i in range(50)]  # Assuming dataset[i] returns (image, label)
+# ref_cdf, ref_bins = compute_reference_histogram(sample_images)
 
-print("Reference histogram computed.")
+# print("Reference histogram computed.")
 
 
 # Transform with random flipping
@@ -137,19 +137,12 @@ if transform_check =='basic':
         transforms.RandomHorizontalFlip(),
         transforms.RandomVerticalFlip(),
     ])
-    # transform = transforms.Compose([
-    #     # transforms.Lambda(lambda x: match_histogram(x, ref_cdf, ref_bins)),  # Apply fixed histogram standardization
-    #     transforms.Normalize(mean=[0.5], std=[0.5]),  # Normalize to [-1, 1] range
-    #     transforms.RandomHorizontalFlip(),
-    #     transforms.RandomVerticalFlip()
-    # ])
 elif transform_check =='augmentations':
         transform = transforms.Compose([
         transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),
         transforms.RandomRotation(degrees=15),
-        # transforms.Normalize(mean=[0.5], std=[0.5]),  # Normalize the grayscale channel
-        transforms.Lambda(lambda x: min_max_normalization(x)),  # Apply min-max normalization
-        transforms.Lambda(lambda x: match_histogram(x, ref_cdf, ref_bins)),  # Apply histogram standardization
+        transforms.Lambda(lambda x: min_max_normalization(x)),  # Min-max normalization,
+        transforms.Normalize(mean=[0.5], std=[0.5]),  # Normalize the grayscale channel
         transforms.Lambda(lambda x: apply_gaussian_denoise(x)),
         transforms.RandomHorizontalFlip(),
         transforms.RandomVerticalFlip()
@@ -167,8 +160,22 @@ print(f"Dataset contains {len(dataset)} samples.")
 # Extract labels for stratified splitting and count the occurrences of each label for Data summary
 labels = np.array([dataset[i][1] for i in range(len(dataset))])
 unique_labels, label_counts = np.unique(labels, return_counts=True)
-label_names = {0: 'Benign', 1: 'Malignant'}
+
+#--- Binary classification
+
+# label_names = {0: 'Benign', 1: 'Malignant'}
+# label_summary = {label_names[label]: count for label, count in zip(unique_labels, label_counts)}
+
+#--- multi-classification
+label_names = {
+    0: 'Benign',
+    1: 'Malignant',
+    2: 'Probably Benign',
+    3: 'Suspicious'
+}
 label_summary = {label_names[label]: count for label, count in zip(unique_labels, label_counts)}
+
+
 print("Dataset Summary:")
 for label, count in tqdm(label_summary.items()):
     print(f"{label}: {count}")
@@ -249,7 +256,11 @@ if k_folds == 0:
                     running_loss += loss.item() * inputs.size(0)
                     correct_preds += torch.sum(preds == labels.data)
                     all_labels.extend(labels.cpu().numpy())
-                    all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy()[:, 1])
+
+                    if config['num_classes'] > 2:
+                        all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy())  # Store all class probabilities
+                    else:
+                        all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy()[:, 1])
 
                     # Save a grid of images for visual inspection (one batch per epoch)
                     if not batch_saved:
@@ -268,7 +279,27 @@ if k_folds == 0:
 
                 epoch_loss = running_loss / len(data_loader.dataset)
                 epoch_acc = correct_preds.double() / len(data_loader.dataset)
-                epoch_auc = roc_auc_score(all_labels, all_preds)
+                # if config['num_classes'] > 2:
+                #     epoch_auc = roc_auc_score(all_labels, all_preds, multi_class='ovo')
+                # else:
+                #     epoch_auc = roc_auc_score(all_labels, all_preds)
+                if config['num_classes'] > 2:
+                    # all_preds = np.array(all_preds)  # Convert list to numpy array
+                    # print("Shape of all_preds:", all_preds.shape)
+                    # print("allpreds is", all_preds)
+
+                    # # Ensure correct shape
+                    # if all_preds.ndim == 1:
+                    #     all_preds = all_preds.reshape(-1, config['num_classes'])
+
+                    # # Normalize predictions if needed
+                    # if not np.allclose(np.sum(all_preds, axis=1), 1.0):
+                    #     all_preds = all_preds / all_preds.sum(axis=1, keepdims=True)
+
+                    epoch_auc = roc_auc_score(all_labels, all_preds, multi_class='ovr')
+                else:
+                    epoch_auc = roc_auc_score(all_labels, all_preds)
+
 
                 print(f'{model_name} - {phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f} AUC: {epoch_auc:.4f}')
 
@@ -365,11 +396,20 @@ else:
                         running_loss += loss.item() * inputs.size(0)
                         correct_preds += torch.sum(preds == labels.data)
                         all_labels.extend(labels.cpu().numpy())
-                        all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy()[:, 1])
+                        # all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy()[:, 1])
+                        
+                        if config['num_classes'] > 2:
+                            all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy())  # Store all class probabilities
+                        else:
+                            all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy()[:, 1])
+
 
                     epoch_loss = running_loss / len(data_loader.dataset)
                     epoch_acc = correct_preds.double() / len(data_loader.dataset)
-                    epoch_auc = roc_auc_score(all_labels, all_preds)
+                    if config['num_classes'] > 2:
+                        epoch_auc = roc_auc_score(all_labels, all_preds, multi_class='ovr')
+                    else:
+                        epoch_auc = roc_auc_score(all_labels, all_preds)
 
                     print(f'{model_name} - {phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f} AUC: {epoch_auc:.4f}')
 
