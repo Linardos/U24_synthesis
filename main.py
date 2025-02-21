@@ -1,6 +1,7 @@
 import os
 import yaml
 import pickle
+import time
 import torch
 import torch.nn as nn
 import numpy as np
@@ -113,8 +114,8 @@ def min_max_normalization(tensor):
     return normalized_tensor
 
 # Load the dataset to compute ref histogram
-print(f"Loading data from {full_data_path}")
-dataset = NiftiDataset(full_data_path=full_data_path, transform=None)  # Load without transform initially
+# print(f"Loading data from {full_data_path}")
+# dataset = NiftiDataset(full_data_path=full_data_path, transform=None)  # Load without transform initially
 # print(f"Dataset contains {len(dataset)} samples.")
 # # Compute the reference histogram from the first 50 images
 # sample_images = [dataset[i][0] for i in range(min(50, len(dataset)))]  # Ensure we don't exceed dataset length
@@ -157,8 +158,18 @@ dataset = NiftiDataset(full_data_path=full_data_path, transform=transform)
 
 print(f"Dataset contains {len(dataset)} samples.")
 
-# Extract labels for stratified splitting and count the occurrences of each label for Data summary
-labels = np.array([dataset[i][1] for i in range(len(dataset))])
+labels = []
+print("Processing for label summary...")
+# for i in tqdm(range(0, len(dataset), 1000)):  # Process in chunks of 1000
+#     start_time = time.time()
+#     labels.extend([dataset[j][1] for j in range(i, min(i + 1000, len(dataset)))])
+#     # print(f'Time for 1000 samples: {time.time() - start_time:.2f} seconds')
+data_loader = DataLoader(dataset, batch_size=1000, num_workers=8, shuffle=False)
+labels = []
+for batch in tqdm(data_loader):
+    labels.extend(batch[1].numpy())  # Assuming labels are the second item in the dataset
+labels = np.array(labels)
+
 unique_labels, label_counts = np.unique(labels, return_counts=True)
 
 #--- Binary classification
@@ -177,7 +188,7 @@ label_summary = {label_names[label]: count for label, count in zip(unique_labels
 
 
 print("Dataset Summary:")
-for label, count in tqdm(label_summary.items()):
+for label, count in label_summary.items():
     print(f"{label}: {count}")
 
 
@@ -207,17 +218,127 @@ if k_folds == 0:
     # train_size = int((1 - val_split) * len(dataset))
     # val_size = len(dataset) - train_size
     # train_dataset, val_dataset = random_split(dataset, [train_size, val_size], generator=torch.Generator().manual_seed(random_seed))
+    # Define the desired stratification ratio (5:3:2:1)
+    # class_ratios = {0: 5, 2: 3, 3: 2, 1: 1}  # Benign: Probably Benign: Suspicious: Malignant
 
-    train_indices, val_indices = train_test_split(np.arange(len(dataset)), test_size=val_split, stratify=labels, random_state=random_seed)
+    # # Compute total weights
+    # total_weight = sum(class_ratios.values())
+
+    # # Get indices for each class
+    # class_indices = {label: np.where(labels == label)[0] for label in np.unique(labels)}
+
+    # # Create stratified train/val split using custom proportions
+    # train_indices = []
+    # val_indices = []
+
+    # for label, indices in class_indices.items():
+    #     # Compute how many samples go to validation
+    #     val_size = int(len(indices) * val_split)
+    #     train_size = len(indices) - val_size
+
+    #     # Adjust the split based on our custom ratio
+    #     val_adjusted = int((val_size / total_weight) * class_ratios[label] * total_weight)
+    #     train_adjusted = len(indices) - val_adjusted  # Remainder goes to training
+
+    #     # Split the data while preserving the 5:3:2:1 ratio
+    #     train_idx, val_idx = train_test_split(indices, test_size=val_adjusted, random_state=random_seed)
+
+    #     train_indices.extend(train_idx)
+    #     val_indices.extend(val_idx)
+
+    # # Convert to numpy arrays
+    # train_indices = np.array(train_indices)
+    # val_indices = np.array(val_indices)
+    # # train_indices, val_indices = train_test_split(np.arange(len(dataset)), test_size=val_split, stratify=labels, random_state=random_seed)
+    # train_dataset = Subset(dataset, train_indices)
+    # val_dataset = Subset(dataset, val_indices)
+
+    # train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    # val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
+    # Define the desired stratification ratio (5:3:2:1)
+    # from sklearn.model_selection import train_test_split
+
+    # Define the desired stratification ratio (5:3:2:1)
+
+    # Define the desired stratification ratio (5:3:2:1)
+    class_ratios = {0: 5, 2: 3, 3: 2, 1: 1}  # Benign: Probably Benign: Suspicious: Malignant
+    total_ratio = sum(class_ratios.values())
+
+    # Get indices for each class
+    class_indices = {label: np.where(labels == label)[0] for label in np.unique(labels)}
+
+    # Compute total validation set size
+    total_val_size = int(len(dataset) * val_split)
+
+    # Compute how many samples per class should go to validation
+    val_class_sizes = {}
+    for label, indices in class_indices.items():
+        if label == 1:  # Malignant, should be ~20% validation
+            val_class_sizes[label] = int(len(indices) * 0.2)  # 20% of Malignant cases in validation
+        else:  # Other classes follow 5:3:2
+            val_class_sizes[label] = int((class_ratios[label] / total_ratio) * total_val_size)
+
+    train_indices, val_indices = [], []
+
+    # Stratified sampling for each class
+    for label, indices in class_indices.items():
+        # Ensure validation set does not take too much from a class
+        val_size = max(1, min(val_class_sizes[label], len(indices) - 1))
+
+        # Convert val_size to fraction for train_test_split()
+        test_fraction = val_size / len(indices) if len(indices) > 1 else 0.5
+
+        # Split the class-specific data
+        train_idx, val_idx = train_test_split(indices, test_size=test_fraction, random_state=random_seed)
+
+        train_indices.extend(train_idx)
+        val_indices.extend(val_idx)
+
+    # Convert to numpy arrays
+    train_indices = np.array(train_indices)
+    val_indices = np.array(val_indices)
+
+    # Create dataset subsets
     train_dataset = Subset(dataset, train_indices)
     val_dataset = Subset(dataset, val_indices)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    # Create DataLoaders
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
+
+    # Debugging Check: Print final label distribution
+    train_label_counts = np.bincount([labels[i] for i in train_indices])
+    val_label_counts = np.bincount([labels[i] for i in val_indices])
+
+    print("Training set distribution:", train_label_counts)
+    print("Validation set distribution:", val_label_counts)
+
+
+
+    def load_checkpoint(checkpoint_path):
+        checkpoint = torch.load(checkpoint_path)
+        for model_name, model in models.items():
+            model.load_state_dict(checkpoint['model_state_dict'][model_name])
+        for model_name, optim in optimizers.items():
+            optim.load_state_dict(checkpoint['optimizer_state_dict'][model_name])
+        for model_name, sched in schedulers.items():
+            sched.load_state_dict(checkpoint['scheduler_state_dict'][model_name])
+        return checkpoint['epoch'], checkpoint['best_val_loss'], checkpoint['no_improvement_epochs']
+
+    # Load from checkpoint if exists
+    latest_checkpoint = os.path.join(experiment_path, 'latest_checkpoint.pth')
+    if os.path.exists(latest_checkpoint):
+        start_epoch, best_val_loss, no_improvement_epochs = load_checkpoint(latest_checkpoint)
+        print(f'Resuming training from epoch {start_epoch}')
+    else:
+        start_epoch = 0
+        best_val_loss = float('inf')
+        no_improvement_epochs = 0
 
 
     # Training and evaluation loop
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, num_epochs):
         batch_saved = False  # Visualize images and save only the first batch in each epoch
         print(f'Epoch {epoch + 1}/{num_epochs}')
         print('-' * 10)
@@ -326,6 +447,18 @@ if k_folds == 0:
         for scheduler in schedulers.values():
             scheduler.step()
         
+        checkpoint_path = os.path.join(experiment_path, f'checkpoint_epoch_{epoch + 1}.pth')
+        torch.save({
+            'epoch': epoch + 1,
+            'model_state_dict': {model_name: model.state_dict() for model_name, model in models.items()},
+            'optimizer_state_dict': {model_name: optim.state_dict() for model_name, optim in optimizers.items()},
+            'scheduler_state_dict': {model_name: sched.state_dict() for model_name, sched in schedulers.items()},
+            'best_val_loss': best_val_loss,
+            'no_improvement_epochs': no_improvement_epochs
+        }, checkpoint_path)
+        print(f'Checkpoint saved at {checkpoint_path}')
+
+
         if no_improvement_epochs >= early_stopping_patience:
             print(f"Early stopping triggered. No improvement for {early_stopping_patience} epochs.")
             break
