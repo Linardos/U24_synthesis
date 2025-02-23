@@ -32,7 +32,8 @@ os.makedirs(model_dir, exist_ok=True)
 # Set up data module
 transform = transforms.Compose([
     transforms.ToTensor(),
-    transforms.Normalize((0.5,), (0.5,)),
+    transforms.Lambda(lambda x: (x - x.min()) / (x.max() - x.min() + 1e-8)),  # Rescale to [0,1]. Necessary to do explicitly with nibabel as ToTensor will omit it.
+    transforms.Normalize((0.5,), (0.5,)),  # Then normalize if needed
     transforms.Lambda(lambda x: x.to(torch.float32))
 ])
 data_module = SynthesisDataModule(batch_size=batch_size, transform=transform)
@@ -48,10 +49,10 @@ checkpoint_callback = ModelCheckpoint(
     dirpath=model_dir,
     filename='cvae-{epoch:02d}-{val_loss:.4f}',
     save_top_k=1,
-    monitor='val_loss',
+    monitor='train_loss', # we don't use a validation since we only care to reconstruct the entire in-distribution data
     mode='min'
 )
-early_stopping_callback = EarlyStopping(monitor='val_loss', patience=10, mode='min')
+early_stopping_callback = EarlyStopping(monitor='train_loss', patience=10, mode='min')
 lr_monitor = LearningRateMonitor(logging_interval='epoch')
 
 # Set up Trainer

@@ -56,11 +56,9 @@ class Encoder(nn.Module):
         label_embedding = self.label_embedding(labels)
         label_channel = label_embedding.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, 256, 256)
         label_channel = label_channel[:, :1, :, :]
-
         x = torch.cat((x, label_channel), dim=1)
         x = self.encoder(x)
         x = x.view(x.shape[0], -1)
-
         mu, logvar = self.mu_layer(x), self.logvar_layer(x)
         return mu, logvar
 
@@ -90,11 +88,12 @@ class Decoder(nn.Module):
         return self.decoder(z)
 
 class CVAE(pl.LightningModule):
-    def __init__(self, latent_dim=latent_dim, label_dim=label_dim, learning_rate=learning_rate):
+    def __init__(self, latent_dim=latent_dim, label_dim=label_dim, learning_rate=learning_rate, verbose=False):
         super().__init__()
         self.encoder = Encoder(latent_dim, label_dim)
         self.decoder = Decoder(latent_dim, label_dim)
         self.learning_rate = learning_rate
+        self.verbose = verbose
         self.apply(weights_init)
         # L1 loss for pixel-level differences
         self.l1_loss_fn = nn.L1Loss()
@@ -117,29 +116,32 @@ class CVAE(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         imgs, labels = batch
         gen_imgs, mu, logvar, z = self.forward(imgs, labels)
-
-        # KL divergence loss
-        logvar = torch.clamp(logvar, min=-4, max=4)
-        kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
-
-        # Clamp generated images to [0,1]
-        gen_imgs = torch.clamp(gen_imgs, 0, 1)
-        
-        # Compute L1 loss
+    
+        logvar_clamped = torch.clamp(logvar, min=-4, max=4)
+        kl_loss = -0.5 * torch.mean(1 + logvar_clamped - mu.pow(2) - logvar_clamped.exp())
+    
         l1_loss = self.l1_loss_fn(gen_imgs, imgs)
-        # Compute SSIM using torchmetrics (values in [0,1], higher is better)
         ssim_val = ssim(gen_imgs, imgs, data_range=1.0)
-        # Define SSIM loss as (1 - ssim)
         ssim_loss = 1 - ssim_val
-
-        # Combined reconstruction loss
+    
         recon_loss = self.l1_weight * l1_loss + self.ssim_weight * ssim_loss
-
         loss = recon_loss + 0.1 * kl_loss
-
-        # Log loss
+    
+        if self.verbose:
+            debug_str = f"Batch {batch_idx}:\n"
+            debug_str += f"  mu: mean={mu.mean().item():.6f}, std={mu.std().item():.6f}\n"
+            debug_str += f"  logvar: mean={logvar.mean().item():.6f}, std={logvar.std().item():.6f}\n"
+            debug_str += f"  KL loss: {kl_loss.item():.6f}\n"
+            debug_str += f"  L1 loss: {l1_loss.item():.6f}\n"
+            debug_str += f"  SSIM value: {ssim_val.item():.6f}\n"
+            debug_str += f"  SSIM loss: {ssim_loss.item():.6f}\n"
+            debug_str += f"  Reconstruction loss: {recon_loss.item():.6f}\n"
+            debug_str += f"  Total loss: {loss.item():.6f}\n"
+            print(debug_str)
+    
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         return loss
+
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)

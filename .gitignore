@@ -1,2 +1,11 @@
 experiments
 *.pyc
+__pycache__/
+g-synth
+*checkpoints/
+*logs
+*.csv
+run_g_synth.sh
+*.pth
+*/saved_models
+archive

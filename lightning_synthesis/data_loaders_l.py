@@ -16,13 +16,26 @@ data_dir = config['data_dir']
 full_data_path = os.path.join(root_dir, data_dir)
 
 class NiftiSynthesisDataset(Dataset):
-    def __init__(self, full_data_path, transform=None):
+    def __init__(self, full_data_path, transform=None, samples_per_class=None):
+        """
+        Args:
+            full_data_path (str): Path to the root directory of your data.
+            transform (callable, optional): Transform to be applied to each image.
+            samples_per_class (int, optional): Fixed number of samples to use from each label.
+                                               If provided, each class must have at least this many samples.
+        """
         self.full_data_path = full_data_path
         self.transform = transform
+        self.samples_per_class = samples_per_class
         self.samples = self._load_samples()
 
     def _load_samples(self):
-        samples = []
+        samples_by_label = {
+            'benign': [],
+            'malignant': [],
+            'probably_benign': [],
+            'suspicious': []
+        }
         class_labels = {
             'benign': 0,
             'malignant': 1,
@@ -41,11 +54,28 @@ class NiftiSynthesisDataset(Dataset):
                 nii_files = [f for f in os.listdir(subdir_path) if f.endswith('.nii.gz')]
                 if nii_files:
                     file_path = os.path.join(subdir_path, nii_files[0])
-                    samples.append((file_path, label))
+                    samples_by_label[class_name].append((file_path, label))
                 else:
                     print(f"No .nii.gz file found in {subdir_path}")
 
-        return samples
+        # If the user requested a fixed number per class, enforce that
+        if self.samples_per_class is not None:
+            fixed_samples = []
+            for class_name, sample_list in samples_by_label.items():
+                if len(sample_list) < self.samples_per_class:
+                    raise ValueError(f"Not enough samples for class '{class_name}'. "
+                                     f"Required {self.samples_per_class}, but found {len(sample_list)}.")
+                # For determinism, we sort and take the first N.
+                # (Alternatively, you can randomize with a fixed seed.)
+                sample_list = sorted(sample_list)[:self.samples_per_class]
+                fixed_samples.extend(sample_list)
+            return fixed_samples
+        else:
+            # Otherwise, return all samples from all classes.
+            all_samples = []
+            for sample_list in samples_by_label.values():
+                all_samples.extend(sample_list)
+            return all_samples
 
     def __len__(self):
         return len(self.samples)
@@ -64,13 +94,15 @@ class NiftiSynthesisDataset(Dataset):
 
 # PyTorch Lightning DataModule
 class SynthesisDataModule(pl.LightningDataModule):
-    def __init__(self, batch_size=8, transform=None):
+    def __init__(self, batch_size=8, transform=None, samples_per_class=None):
         super().__init__()
         self.batch_size = batch_size
         self.transform = transform
+        self.samples_per_class = samples_per_class
 
     def setup(self, stage=None):
-        self.dataset = NiftiSynthesisDataset(full_data_path, transform=self.transform)
+        self.dataset = NiftiSynthesisDataset(full_data_path, transform=self.transform, 
+                                              samples_per_class=self.samples_per_class)
 
     def train_dataloader(self):
         return DataLoader(self.dataset, batch_size=self.batch_size, shuffle=True)
@@ -80,19 +112,3 @@ class SynthesisDataModule(pl.LightningDataModule):
 
     def test_dataloader(self):
         return DataLoader(self.dataset, batch_size=self.batch_size, shuffle=False)
-
-# Example of transform
-transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.5,), (0.5,))
-])
-
-# Example of usage
-if __name__ == "__main__":
-    data_module = SynthesisDataModule(batch_size=8, transform=transform)
-    data_module.setup()
-
-    for batch in data_module.train_dataloader():
-        imgs, labels = batch
-        print(imgs.shape, labels)
-        break
