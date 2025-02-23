@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import pytorch_lightning as pl
 import yaml
+from torchmetrics.functional import structural_similarity_index_measure as ssim
 
 with open('config_l.yaml', 'r') as f:
     config = yaml.safe_load(f)
@@ -20,9 +21,9 @@ class ResidualBlock(nn.Module):
     def __init__(self, in_channels):
         super(ResidualBlock, self).__init__()
         self.conv1 = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1)
-        self.norm1 = nn.LayerNorm([in_channels, 256, 256])
+        self.norm1 = nn.InstanceNorm2d(in_channels)
         self.conv2 = nn.Conv2d(in_channels, in_channels, kernel_size=3, padding=1)
-        self.norm2 = nn.LayerNorm([in_channels, 256, 256])
+        self.norm2 = nn.InstanceNorm2d(in_channels)
 
     def forward(self, x):
         identity = x
@@ -95,6 +96,11 @@ class CVAE(pl.LightningModule):
         self.decoder = Decoder(latent_dim, label_dim)
         self.learning_rate = learning_rate
         self.apply(weights_init)
+        # L1 loss for pixel-level differences
+        self.l1_loss_fn = nn.L1Loss()
+        # Weights for combining L1 and SSIM losses
+        self.l1_weight = 0.5
+        self.ssim_weight = 0.5
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
@@ -112,18 +118,29 @@ class CVAE(pl.LightningModule):
         imgs, labels = batch
         gen_imgs, mu, logvar, z = self.forward(imgs, labels)
 
+        # KL divergence loss
         logvar = torch.clamp(logvar, min=-4, max=4)
         kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
-        
+
+        # Clamp generated images to [0,1]
         gen_imgs = torch.clamp(gen_imgs, 0, 1)
-        recon_loss = self.criterion(gen_imgs, imgs)
-        loss = recon_loss + 0.1 * kl_loss
         
+        # Compute L1 loss
+        l1_loss = self.l1_loss_fn(gen_imgs, imgs)
+        # Compute SSIM using torchmetrics (values in [0,1], higher is better)
+        ssim_val = ssim(gen_imgs, imgs, data_range=1.0)
+        # Define SSIM loss as (1 - ssim)
+        ssim_loss = 1 - ssim_val
+
+        # Combined reconstruction loss
+        recon_loss = self.l1_weight * l1_loss + self.ssim_weight * ssim_loss
+
+        loss = recon_loss + 0.1 * kl_loss
+
         # Log loss
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
-        
         return loss
-    
+
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         return optimizer

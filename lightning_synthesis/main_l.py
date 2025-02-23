@@ -32,7 +32,8 @@ os.makedirs(model_dir, exist_ok=True)
 # Set up data module
 transform = transforms.Compose([
     transforms.ToTensor(),
-    transforms.Normalize((0.5,), (0.5,))
+    transforms.Normalize((0.5,), (0.5,)),
+    transforms.Lambda(lambda x: x.to(torch.float32))
 ])
 data_module = SynthesisDataModule(batch_size=batch_size, transform=transform)
 
