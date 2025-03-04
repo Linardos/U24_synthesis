@@ -17,12 +17,12 @@ pretrained: False  # Typically False for synthesis models since they’re traine
 val_split: 0.2  # Fraction of data used for validation
 
 # Model Selection
-model_type: 'cvae'  # Choose from ['cgan', 'cvae']
+model_type: 'ddpm'  # Choose from ['ddpm', 'cvae']
 # generator_arch: 'resnet'  # Options: ['mlp', 'cnn', 'resnet']
 
 # Experiment Tracking
 experiment_number: 1  # Update as needed
-experiment_name: '008_Lightning_synthesis_CVAE'
+experiment_name: '010_Lightning_synthesis_DDPM'
 model_dir: 'saved_models'  # Directory to save model checkpoints
 
 # Evaluation & Logging

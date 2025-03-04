@@ -8,7 +8,7 @@ from torchvision.utils import save_image
 from torchvision import transforms
 
 from data_loaders_l import SynthesisDataModule
-from models_l import CVAE
+from model_architectures import CVAE, DDPM
 
 torch.set_float32_matmul_precision('medium')
 # Load configuration
@@ -23,6 +23,7 @@ latent_dim = config.get('latent_dim', 100)
 label_dim = config.get('label_dim', 4)
 experiment_name = config['experiment_name']
 model_dir = config.get('model_dir', 'saved_models')
+model_type = config['model_type']
 
 # Prepare output directories
 experiment_path = os.path.join('experiments', experiment_name)
@@ -39,7 +40,14 @@ transform = transforms.Compose([
 data_module = SynthesisDataModule(batch_size=batch_size, transform=transform)
 
 # Initialize model
-model = CVAE(latent_dim=latent_dim, label_dim=label_dim, learning_rate=learning_rate)
+print(f"Running {model_type}...")
+if model_type == 'cvae':
+    model = CVAE(latent_dim=latent_dim, label_dim=label_dim, learning_rate=learning_rate)
+elif model_type == 'ddpm':
+    model = DDPM(label_dim=label_dim, learning_rate=learning_rate)
+else:
+    raise ValueError(f"Unknown model_type: {model_type}. Supported types are 'cvae' and 'ddpm'.")
+
 
 # Set up logger
 tb_logger = pl_loggers.TensorBoardLogger('logs/', name=experiment_name)
@@ -47,7 +55,7 @@ tb_logger = pl_loggers.TensorBoardLogger('logs/', name=experiment_name)
 # Set up callbacks
 checkpoint_callback = ModelCheckpoint(
     dirpath=model_dir,
-    filename='cvae-{epoch:02d}-{val_loss:.4f}',
+    filename=f'{model_type}-{{epoch:02d}}-{{train_loss:.4f}}',
     save_top_k=1,
     monitor='train_loss', # we don't use a validation since we only care to reconstruct the entire in-distribution data
     mode='min'
@@ -62,6 +70,7 @@ trainer = pl.Trainer(
     logger=tb_logger,
     callbacks=[checkpoint_callback, early_stopping_callback, lr_monitor],
     enable_progress_bar=True,
+    gradient_clip_val=0.5
 )
 
 # Start training

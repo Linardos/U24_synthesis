@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import pytorch_lightning as pl
 import yaml
 from torchmetrics.functional import structural_similarity_index_measure as ssim
@@ -10,10 +11,21 @@ label_dim = config.get('label_dim', 4)
 latent_dim = config.get('latent_dim', 100)
 learning_rate = config['learning_rate']
 
-# Weight Initialization
+
+def masked_l1_loss(output, target, mask_threshold=0.0, weight=10.0):
+    """
+    Computes an L1 loss that gives more weight to non-zero regions.
+    - `mask_threshold`: Pixels greater than this value are considered important.
+    - `weight`: Importance factor for non-zero pixels.
+    """
+    mask = (target > mask_threshold).float() * weight + (target <= mask_threshold).float()
+    return (mask * F.l1_loss(output, target, reduction='none')).mean()
+
+
+# Weight Initialization using Xavier (Glorot) Initialization
 def weights_init(m):
     if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d, nn.Linear)):
-        nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
+        nn.init.xavier_normal_(m.weight)
         if m.bias is not None:
             nn.init.constant_(m.bias, 0)
 
@@ -78,7 +90,7 @@ class Decoder(nn.Module):
             nn.ReLU(),
             ResidualBlock(32),
             nn.ConvTranspose2d(32, 1, kernel_size=4, stride=2, padding=1),
-            nn.Sigmoid()  # Output scaled to [0,1]
+            # nn.Sigmoid()  # Output scaled to [0,1]
         )
 
     def forward(self, z, labels):
@@ -96,10 +108,10 @@ class CVAE(pl.LightningModule):
         self.verbose = verbose
         self.apply(weights_init)
         # L1 loss for pixel-level differences
-        self.l1_loss_fn = nn.L1Loss()
+        # self.l1_loss_fn = nn.L1Loss()
         # Weights for combining L1 and SSIM losses
-        self.l1_weight = 0.5
-        self.ssim_weight = 0.5
+        self.l1_weight = 1
+        self.ssim_weight = 0
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5 * logvar)
@@ -116,16 +128,16 @@ class CVAE(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         imgs, labels = batch
         gen_imgs, mu, logvar, z = self.forward(imgs, labels)
-    
+        gen_imgs = torch.clamp(gen_imgs, 0, 1)
         logvar_clamped = torch.clamp(logvar, min=-4, max=4)
         kl_loss = -0.5 * torch.mean(1 + logvar_clamped - mu.pow(2) - logvar_clamped.exp())
     
-        l1_loss = self.l1_loss_fn(gen_imgs, imgs)
+        l1_loss = masked_l1_loss(gen_imgs, imgs)
         ssim_val = ssim(gen_imgs, imgs, data_range=1.0)
         ssim_loss = 1 - ssim_val
     
         recon_loss = self.l1_weight * l1_loss + self.ssim_weight * ssim_loss
-        loss = recon_loss + 0.1 * kl_loss
+        loss = l1_loss + 0.1 * kl_loss
     
         if self.verbose:
             debug_str = f"Batch {batch_idx}:\n"
