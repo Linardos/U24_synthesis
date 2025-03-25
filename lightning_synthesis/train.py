@@ -70,7 +70,7 @@ trainer = pl.Trainer(
     logger=tb_logger,
     callbacks=[checkpoint_callback, early_stopping_callback, lr_monitor],
     enable_progress_bar=True,
-    gradient_clip_val=0.5
+    gradient_clip_val=1.0
 )
 
 # Start training

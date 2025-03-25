@@ -9,3 +9,4 @@ run_g_synth.sh
 *.pth
 */saved_models
 archive
+*/inference_results

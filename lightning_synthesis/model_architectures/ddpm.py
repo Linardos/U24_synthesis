@@ -13,8 +13,8 @@ timesteps = config.get('timesteps', 1000)  # Number of diffusion steps
 label_dim = config.get('label_dim', 4)
 guidance_scale = config.get('guidance_scale', 5.0)  # Strength of classifier-free guidance
 
-# Sinusoidal Position Embeddings for Timestep Embedding
 class SinusoidalPositionEmbeddings(nn.Module):
+    """Creates a sinusoidal embedding of diffusion timestep `t`, so the model knows where in the noise schedule it is."""
     def __init__(self, dim):
         super().__init__()
         self.dim = dim
@@ -26,9 +26,12 @@ class SinusoidalPositionEmbeddings(nn.Module):
         embeddings = time[:, None] * embeddings[None, :]
         return torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
 
-# UNet-like Denoiser Model with Classifier-Free Guidance
-# UNet-like Denoiser Model with Classifier-Free Guidance
 class DenoiseModel(nn.Module):
+    """
+    A lightweight U-Net-like model for denoising, with classifier-free guidance.
+    Takes in a noisy image, timestep `t`, and optional labels.
+    Concatenates image + timestep + label embedding and predicts the noise.
+    """
     def __init__(self, label_dim, time_dim=256):
         super().__init__()
         self.label_dim = label_dim
@@ -89,9 +92,19 @@ class DenoiseModel(nn.Module):
         x = self.activation(self.conv3(x))
         return self.conv4(x)
 
+def cosine_beta_schedule(timesteps, s=0.008):
+    """Cosine schedule for beta values (noise variance), as used in improved DDPM. Cosine schedules tend to result in better quality than linear ones."""
+    steps = torch.linspace(0, timesteps, timesteps + 1)
+    alphas_cumprod = torch.cos((steps / timesteps + s) / (1 + s) * (torch.pi / 2)) ** 2
+    betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
+    return torch.clamp(betas, 0, 0.999)
 
 # Diffusion Model with Classifier-Free Guidance
 class DDPM(pl.LightningModule):
+    """
+    Implements the DDPM (Denoising Diffusion Probabilistic Model) training framework.
+    Includes support for classifier-free guidance (unconditional + conditional loss blending).
+    """
     def __init__(self, label_dim, learning_rate=learning_rate, timesteps=1000, guidance_scale=guidance_scale, verbose=False):
         super().__init__()
         self.model = DenoiseModel(label_dim)
@@ -100,24 +113,27 @@ class DDPM(pl.LightningModule):
         self.verbose = verbose
         self.guidance_scale = guidance_scale
 
-        # Diffusion parameters
-        self.register_buffer('betas', torch.linspace(1e-4, 0.02, timesteps))
+        # Replace this in DDPM initialization
+        self.register_buffer('betas', cosine_beta_schedule(timesteps))
         self.register_buffer('alphas', 1.0 - self.betas)
         self.register_buffer('alpha_hat', torch.cumprod(self.alphas, dim=0))
 
+        # Ensure alpha_hat never hits exactly 0 (avoids NaN division)
+        self.alpha_hat = torch.clamp(self.alpha_hat, min=1e-8)
+
     def forward(self, x, t, labels=None):
-        # if labels is not None and (labels != -1).any():
         if labels is not None and isinstance(labels, torch.Tensor) and (labels != -1).any():
-            # Generate both conditional and unconditional predictions
             noise_pred_cond = self.model(x, t, labels)  # Conditional
             noise_pred_uncond = self.model(x, t, -1)    # Unconditional
 
-            # Combine them using classifier-free guidance
+            # Fix: Use correct guidance formula
             noise_pred = noise_pred_uncond + self.guidance_scale * (noise_pred_cond - noise_pred_uncond)
+
+            # Fix: Clamp extreme values to prevent numerical instability
+            noise_pred = torch.clamp(noise_pred, -5, 5)
         else:
-            # Only unconditional generation
             noise_pred = self.model(x, t, -1)
-            
+
         return noise_pred
 
     def training_step(self, batch, batch_idx):
@@ -143,6 +159,27 @@ class DDPM(pl.LightningModule):
 
 
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+
+        # **Log Noisy and Denoised Images to TensorBoard**
+        if batch_idx % 500 == 0:
+            # Reconstruct x₀ from predicted noise
+            alpha_hat_t = self.alpha_hat[t].to(t.device)[:, None, None, None]
+            sqrt_alpha_hat = torch.sqrt(alpha_hat_t)
+            sqrt_one_minus_alpha_hat = torch.sqrt(1.0 - alpha_hat_t)
+
+            reconstructed = (noisy_imgs - sqrt_one_minus_alpha_hat * predicted_noise) / sqrt_alpha_hat
+
+            # log them
+            grid_size = min(8, batch_size)
+            imgs_to_show = (imgs[:grid_size] + 1) / 2
+            noisy_to_show = (noisy_imgs[:grid_size] + 1) / 2
+            denoised_to_show = reconstructed[:grid_size]  # Now truly denoised!
+
+            self.logger.experiment.add_images("Original Images", imgs_to_show, global_step=self.current_epoch)
+            self.logger.experiment.add_images("Noisy Images", noisy_to_show, global_step=self.current_epoch)
+            self.logger.experiment.add_images("Denoised Images", denoised_to_show, global_step=self.current_epoch)
+
+
         return loss
 
     def q_sample(self, x_start, t, noise):
@@ -155,8 +192,8 @@ class DDPM(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         return optimizer
-model = DDPM(label_dim=4, learning_rate=1e-4, timesteps=1000, guidance_scale=5.0, verbose=True)
+# model = DDPM(label_dim=4, learning_rate=1e-4, timesteps=1000, guidance_scale=5.0, verbose=True)
 
 # Check model device and parameters
-print("Model Parameters:", sum(p.numel() for p in model.parameters()))
-print("Model Device:", next(model.parameters()).device)
+# print("Model Parameters:", sum(p.numel() for p in model.parameters()))
+# print("Model Device:", next(model.parameters()).device)
