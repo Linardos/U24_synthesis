@@ -160,24 +160,59 @@ class DDPM(pl.LightningModule):
 
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
 
-        # **Log Noisy and Denoised Images to TensorBoard**
+        # **Log reconstructions at fixed timesteps for consistent visualization**
+
         if batch_idx % 500 == 0:
-            # Reconstruct x₀ from predicted noise
-            alpha_hat_t = self.alpha_hat[t].to(t.device)[:, None, None, None]
-            sqrt_alpha_hat = torch.sqrt(alpha_hat_t)
-            sqrt_one_minus_alpha_hat = torch.sqrt(1.0 - alpha_hat_t)
+            fixed_timesteps = [100, 300, 500, 700, 900]
+            with torch.no_grad():
+                grid_size = min(4, batch_size)  # Smaller grid to fit all t
+                imgs_for_logging = imgs[:grid_size]
+                labels_for_logging = labels[:grid_size]
 
-            reconstructed = (noisy_imgs - sqrt_one_minus_alpha_hat * predicted_noise) / sqrt_alpha_hat
+                self.logger.experiment.add_images("Original Images", (imgs_for_logging + 1) / 2, global_step=self.current_epoch)
 
-            # log them
-            grid_size = min(8, batch_size)
-            imgs_to_show = (imgs[:grid_size] + 1) / 2
-            noisy_to_show = (noisy_imgs[:grid_size] + 1) / 2
-            denoised_to_show = reconstructed[:grid_size]  # Now truly denoised!
+                for t_val in fixed_timesteps:
+                    t_fixed = torch.full((grid_size,), t_val, device=imgs.device, dtype=torch.long)
+                    noise = torch.randn_like(imgs_for_logging)
+                    
+                    alpha_hat_t = self.alpha_hat[t_val].to(imgs.device)
+                    sqrt_alpha_hat = torch.sqrt(alpha_hat_t)
+                    sqrt_one_minus_alpha_hat = torch.sqrt(1.0 - alpha_hat_t)
 
-            self.logger.experiment.add_images("Original Images", imgs_to_show, global_step=self.current_epoch)
-            self.logger.experiment.add_images("Noisy Images", noisy_to_show, global_step=self.current_epoch)
-            self.logger.experiment.add_images("Denoised Images", denoised_to_show, global_step=self.current_epoch)
+                    noisy_imgs = sqrt_alpha_hat * imgs_for_logging + sqrt_one_minus_alpha_hat * noise
+
+                    # Predict with classifier-free guidance
+                    noise_pred_cond = self.model(noisy_imgs, t_fixed, labels_for_logging)
+                    noise_pred_uncond = self.model(noisy_imgs, t_fixed, -1 * torch.ones_like(labels_for_logging))
+                    predicted_noise = noise_pred_uncond + self.guidance_scale * (noise_pred_cond - noise_pred_uncond)
+
+                    reconstructed = (noisy_imgs - sqrt_one_minus_alpha_hat * predicted_noise) / sqrt_alpha_hat
+                    reconstructed = torch.clamp(reconstructed, -1, 1)
+
+                    # Normalize for TensorBoard
+                    self.logger.experiment.add_images(
+                        f"Denoised_t{t_val}", (reconstructed + 1) / 2, global_step=self.current_epoch
+            )
+
+
+        # **Log Noisy and Denoised Images to TensorBoard**
+        # if batch_idx % 500 == 0:
+        #     # Reconstruct x₀ from predicted noise
+        #     alpha_hat_t = self.alpha_hat[t].to(t.device)[:, None, None, None]
+        #     sqrt_alpha_hat = torch.sqrt(alpha_hat_t)
+        #     sqrt_one_minus_alpha_hat = torch.sqrt(1.0 - alpha_hat_t)
+
+        #     reconstructed = (noisy_imgs - sqrt_one_minus_alpha_hat * predicted_noise) / sqrt_alpha_hat
+
+        #     # log them
+        #     grid_size = min(8, batch_size)
+        #     imgs_to_show = (imgs[:grid_size] + 1) / 2
+        #     noisy_to_show = (noisy_imgs[:grid_size] + 1) / 2
+        #     denoised_to_show = reconstructed[:grid_size]  # Now truly denoised!
+
+        #     self.logger.experiment.add_images("Original Images", imgs_to_show, global_step=self.current_epoch)
+        #     self.logger.experiment.add_images("Noisy Images", noisy_to_show, global_step=self.current_epoch)
+        #     self.logger.experiment.add_images("Denoised Images", denoised_to_show, global_step=self.current_epoch)
 
 
         return loss

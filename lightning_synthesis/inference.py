@@ -13,18 +13,18 @@ with open('config_l.yaml', 'r') as f:
     config = yaml.safe_load(f)
 
 # Extract parameters from config
-batch_size = config.get('batch_size', 1)  # Use small batch size for inference
+batch_size = config.get('batch_size', 1)
 label_dim = config.get('label_dim', 4)
 experiment_name = config.get('experiment_name', 'default_experiment')
 model_dir = config.get('model_dir', 'saved_models')
 
-# Specify the checkpoint path to load the trained model
+# Specify checkpoint
 checkpoint_path = os.path.join(model_dir, 'ddpm-epoch=12-train_loss=0.0965.ckpt')
 
-# Set up the same transform as used during training
+# Set up transform (same as training)
 transform = transforms.Compose([
     transforms.ToTensor(),
-    transforms.Lambda(lambda x: (x - x.min()) / (x.max() - x.min() + 1e-8)), 
+    transforms.Lambda(lambda x: (x - x.min()) / (x.max() - x.min() + 1e-8)),
     transforms.Normalize((0.5,), (0.5,)),
     transforms.Lambda(lambda x: x.to(torch.float32))
 ])
@@ -33,30 +33,28 @@ transform = transforms.Compose([
 data_module = SynthesisDataModule(batch_size=batch_size, transform=transform)
 data_module.setup()
 
-# Load the trained model from checkpoint
+# Load trained model
 model = DDPM.load_from_checkpoint(
     checkpoint_path,
     label_dim=label_dim,
-    learning_rate=0  # learning_rate is not used during inference
+    learning_rate=0  # Not used at inference
 )
-model.eval()  # Set model to evaluation mode
-
-# Move model to the correct device
+model.eval()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model.to(device)
 
-# Create a directory to save inference results
+# Create output dir
 inference_dir = os.path.join('inference_results', experiment_name)
 os.makedirs(inference_dir, exist_ok=True)
 
-# Determine inference parameters
-num_images_to_generate = 10  # Number of images to generate
-num_timesteps = model.timesteps  # Number of denoising steps
+# Parameters
+num_images_to_generate = 10
+num_timesteps = model.timesteps
 
 
-def sample_ddpm(model, num_samples, num_timesteps, label=None):
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    img_size = (num_samples, 1, 256, 256)  # Assuming grayscale 256x256 images
+def sample_ddpm(model, num_samples, num_timesteps, label=None, guidance_scale=None):
+    device = next(model.parameters()).device
+    img_size = (num_samples, 1, 256, 256)
     noisy_img = torch.randn(img_size, device=device)
 
     if label is not None:
@@ -65,43 +63,50 @@ def sample_ddpm(model, num_samples, num_timesteps, label=None):
         label_tensor = None
 
     for t in reversed(range(num_timesteps)):
-        timestep_tensor = torch.tensor([t] * num_samples, dtype=torch.long, device=device)
-        predicted_noise = model(noisy_img, timestep_tensor, label_tensor)
+        timestep_tensor = torch.full((num_samples,), t, dtype=torch.long, device=device)
 
-        alpha_t = model.alpha_hat[t].to(device)
-        sqrt_alpha_t = torch.sqrt(alpha_t)
-        sqrt_one_minus_alpha_t = torch.sqrt(1 - alpha_t)
-
-        # Fix: Add correct noise scaling
-        if t > 0:
-            sigma_t = torch.sqrt((1 - alpha_t) / (1 - model.alpha_hat[t-1]))
-            noise = torch.randn_like(noisy_img, device=device) * sigma_t
-            noisy_img = (1 / sqrt_alpha_t) * (noisy_img - sqrt_one_minus_alpha_t * predicted_noise) + noise
+        # Optional classifier-free guidance block (only if trained with it)
+        if guidance_scale is not None and label_tensor is not None:
+            noise_pred_cond = model(noisy_img, timestep_tensor, label_tensor)
+            noise_pred_uncond = model(noisy_img, timestep_tensor, None)
+            predicted_noise = noise_pred_uncond + guidance_scale * (noise_pred_cond - noise_pred_uncond)
         else:
-            noisy_img = (1 / sqrt_alpha_t) * (noisy_img - sqrt_one_minus_alpha_t * predicted_noise)
+            predicted_noise = model(noisy_img, timestep_tensor, label_tensor)
 
-    return torch.clamp(noisy_img, -1, 1)  # Ensure final values are in range
+        alpha_t = model.alphas[t].to(device)
+        beta_t = model.betas[t].to(device)
+        alpha_hat_t = model.alpha_hat[t].to(device)
+
+        sqrt_alpha_t = torch.sqrt(alpha_t)
+        sqrt_one_minus_alpha_hat = torch.sqrt(1 - alpha_hat_t)
+
+        # Predict x0
+        x0_pred = (noisy_img - sqrt_one_minus_alpha_hat * predicted_noise) / torch.sqrt(alpha_hat_t)
+
+        if t > 0:
+            noise = torch.randn_like(noisy_img, device=device)
+            noisy_img = torch.sqrt(alpha_t) * x0_pred + torch.sqrt(1 - alpha_t) * noise
+        else:
+            noisy_img = x0_pred  # Final step, no noise added
+
+    return torch.clamp(noisy_img, -1, 1)
 
 
-
-# Generate images
+# Generate and save
 generated_images = sample_ddpm(model, num_images_to_generate, num_timesteps)
-# Fix: Apply the exact same de-normalization at inference time before saving
+
+# Rescale from [-1, 1] to [0, 1]
 def denormalize(img):
-    return (img + 1) / 2  # Maps from [-1,1] to [0,1]
+    return (img + 1) / 2
 
+generated_images = denormalize(generated_images)
 
-# Convert generated images from [-1,1] to [0,1] for saving
-generated_images = (generated_images + 1) / 2
 print("Generated Images Tensor Shape:", generated_images.shape)
 print("Min:", generated_images.min().item(), "Max:", generated_images.max().item())
-# Ensure all saved images are correctly scaled
+
 for i, img in enumerate(generated_images):
-    save_image(denormalize(img), f"inference_results/generated_image_{i+1}.png")
-# Save generated images
-# for i in range(num_images_to_generate):
-#     img_path = os.path.join(inference_dir, f"generated_image_{i+1}.png")
-#     save_image(generated_images[i], img_path)
-#     print(f"Saved: {img_path}")
+    save_path = os.path.join(inference_dir, f"generated_image_{i+1}.png")
+    save_image(img, save_path)
+    print(f"Saved: {save_path}")
 
 print("Generation complete! Images saved in:", inference_dir)
