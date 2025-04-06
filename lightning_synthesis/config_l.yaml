@@ -22,7 +22,7 @@ model_type: 'ddpm'  # Choose from ['ddpm', 'cvae']
 
 # Experiment Tracking
 experiment_number: 1  # Update as needed
-experiment_name: '013_Lightning_synthesis_DDPM_tryagainn'
+experiment_name: '016_Lightning_synthesis_DDPM_Attention'
 model_dir: 'saved_models'  # Directory to save model checkpoints
 
 # Evaluation & Logging
