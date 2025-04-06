@@ -8,7 +8,7 @@ latent_dim: 64  # Optimized for CVAE
 label_dim: 4  # Number of unique labels for conditional synthesis
 
 # Training Hyperparameters
-batch_size: 32  # Increased for more stable gradients
+batch_size: 8  # Increased for more stable gradients
 learning_rate: 0.00001  # Optimized for CVAE
 # weight_decay: 0.0001  # Slightly increased regularization
 num_epochs: 200  # CVAE benefits from longer training
@@ -22,7 +22,7 @@ model_type: 'ddpm'  # Choose from ['ddpm', 'cvae']
 
 # Experiment Tracking
 experiment_number: 1  # Update as needed
-experiment_name: '016_Lightning_synthesis_DDPM_Attention'
+experiment_name: '017_Lightning_synthesis_DDPM_Attention-efficient'
 model_dir: 'saved_models'  # Directory to save model checkpoints
 
 # Evaluation & Logging

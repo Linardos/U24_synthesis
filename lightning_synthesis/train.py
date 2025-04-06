@@ -10,11 +10,13 @@ from torchvision import transforms
 from data_loaders_l import SynthesisDataModule
 from model_architectures import CVAE, DDPM
 
+
 torch.set_float32_matmul_precision('medium')
 # Load configuration
 with open('config_l.yaml', 'r') as f:
     config = yaml.safe_load(f)
 
+pl.seed_everything(config.get('seed', 42), workers=True)
 # Extract parameters from config
 batch_size = config['batch_size']
 learning_rate = config['learning_rate']
@@ -22,13 +24,11 @@ num_epochs = config['num_epochs']
 latent_dim = config.get('latent_dim', 100)
 label_dim = config.get('label_dim', 4)
 experiment_name = config['experiment_name']
-model_dir = config.get('model_dir', 'saved_models')
 model_type = config['model_type']
 
 # Prepare output directories
 experiment_path = os.path.join('experiments', experiment_name)
 os.makedirs(experiment_path, exist_ok=True)
-os.makedirs(model_dir, exist_ok=True)
 
 # Set up data module
 transform = transforms.Compose([
@@ -54,7 +54,7 @@ tb_logger = pl_loggers.TensorBoardLogger('logs/', name=experiment_name)
 
 # Set up callbacks
 checkpoint_callback = ModelCheckpoint(
-    dirpath=model_dir,
+    dirpath=os.path.join(experiment_path, 'checkpoints'),
     filename=f'{model_type}-{{epoch:02d}}-{{train_loss:.4f}}',
     save_top_k=1,
     monitor='train_loss', # we don't use a validation since we only care to reconstruct the entire in-distribution data
@@ -66,11 +66,13 @@ lr_monitor = LearningRateMonitor(logging_interval='epoch')
 # Set up Trainer
 trainer = pl.Trainer(
     max_epochs=num_epochs,
+    precision=16,
     accelerator='gpu' if torch.cuda.is_available() else 'cpu',
     logger=tb_logger,
     callbacks=[checkpoint_callback, early_stopping_callback, lr_monitor],
     enable_progress_bar=True,
-    gradient_clip_val=1.0
+    gradient_clip_val=1.0,
+    num_sanity_val_steps=0
 )
 
 # Start training

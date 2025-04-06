@@ -285,7 +285,7 @@ class DDPM(pl.LightningModule):
         conditional_labels = labels.clone().detach()
         conditional_labels[drop_labels] = -1
 
-        predicted_noise = self.forward(noisy_imgs, t, conditional_labels)
+        predicted_noise = self.model(noisy_imgs, t, conditional_labels)
         loss = F.mse_loss(predicted_noise, noise)
 
         if self.verbose:
@@ -297,7 +297,7 @@ class DDPM(pl.LightningModule):
 
         # **Log reconstructions at fixed timesteps for consistent visualization**
 
-        if batch_idx % 500 == 0:
+        if batch_idx % 2000 == 0:
             fixed_timesteps = [100, 300, 500, 700, 900]
             with torch.no_grad():
                 grid_size = min(4, batch_size)  # Smaller grid to fit all t
@@ -324,7 +324,13 @@ class DDPM(pl.LightningModule):
                     reconstructed = (noisy_imgs - sqrt_one_minus_alpha_hat * predicted_noise) / sqrt_alpha_hat
                     reconstructed = torch.clamp(reconstructed, -1, 1)
                     # Compute SSIM on reconstructed images
-                    ssim_val = ssim((imgs_for_logging + 1) / 2, torch.clamp((reconstructed[:grid_size] + 1) / 2, 0, 1), data_range=1.0).mean()
+                    ssim_val = ssim(
+                        (imgs_for_logging + 1) / 2,
+                        torch.clamp((reconstructed[:grid_size] + 1) / 2, 0, 1),
+                        data_range=1.0,
+                        reduction='mean'
+                    )
+
                     self.log('train_ssim', ssim_val, on_step=True, on_epoch=True, prog_bar=True, logger=True)
 
                     # Normalize for TensorBoard
