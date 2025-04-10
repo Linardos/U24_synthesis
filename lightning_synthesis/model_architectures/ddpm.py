@@ -96,15 +96,11 @@ class Residual(nn.Module):
     def forward(self, x):
         return self.fn(x) + x
 
-
+print(f"[INFO] Attention is {'ON' if attention_on else 'OFF'}")
 class MaybeAttentionBlock(nn.Module):
     def __init__(self, dim):
         super().__init__()
-        self.enabled = attention_on
-        if self.enabled:
-            self.attn = Residual(SpatialLinearAttention(dim))
-        else:
-            self.attn = nn.Identity()
+        self.attn = Residual(SpatialLinearAttention(dim)) if attention_on else nn.Identity()
 
     def forward(self, x):
         return self.attn(x)
@@ -122,10 +118,14 @@ class DenoiseModel(nn.Module):
 
         self.input_proj = nn.Conv2d(2, 64, kernel_size=3, padding=1)
 
-        self.down1 = nn.Sequential(Down(64, 128), MaybeAttentionBlock(128))
-        self.down2 = nn.Sequential(Down(128, 256), MaybeAttentionBlock(256))
-        self.down3 = nn.Sequential(Down(256, 512), MaybeAttentionBlock(512))
-        self.down4 = nn.Sequential(Down(512, 1024), MaybeAttentionBlock(1024))
+        self.down1_block = Down(64, 128)
+        self.down1_attn = MaybeAttentionBlock(128)
+        self.down2_block = Down(128, 256)
+        self.down2_attn = MaybeAttentionBlock(256)
+        self.down3_block = Down(256, 512)
+        self.down3_attn = MaybeAttentionBlock(512)
+        self.down4_block = Down(512, 1024)
+        self.down4_attn = MaybeAttentionBlock(1024)
 
         self.mid = nn.Sequential(
             ResBlock(1024, 1024),
@@ -133,9 +133,13 @@ class DenoiseModel(nn.Module):
             ResBlock(1024, 1024)
         )
 
-        self.up1 = nn.Sequential(Up(1024 + 512, 512), MaybeAttentionBlock(512))
-        self.up2 = nn.Sequential(Up(512 + 256, 256), MaybeAttentionBlock(256))
-        self.up3 = nn.Sequential(Up(256 + 128, 128), MaybeAttentionBlock(128))
+        self.up1_block = Up(1024 + 512, 512)
+        self.up1_attn = MaybeAttentionBlock(512)
+        self.up2_block = Up(512 + 256, 256)
+        self.up2_attn = MaybeAttentionBlock(256)
+        self.up3_block = Up(256 + 128, 128)
+        self.up3_attn = MaybeAttentionBlock(128)
+
         self.up4 = Up(128 + 64, 64)
 
         self.output_proj = nn.Conv2d(64, 1, kernel_size=3, padding=1)
@@ -157,19 +161,20 @@ class DenoiseModel(nn.Module):
         x = torch.cat([x, emb], dim=1)
 
         x0 = self.input_proj(x)
-        x1 = self.down1(x0)
-        x2 = self.down2(x1)
-        x3 = self.down3(x2)
-        x4 = self.down4(x3)
+        x1 = self.down1_attn(self.down1_block(x0))
+        x2 = self.down2_attn(self.down2_block(x1))
+        x3 = self.down3_attn(self.down3_block(x2))
+        x4 = self.down4_attn(self.down4_block(x3))
 
         x_mid = self.mid(x4)
 
-        x = self.up1(x_mid, x3)
-        x = self.up2(x, x2)
-        x = self.up3(x, x1)
+        x = self.up1_attn(self.up1_block(x_mid, x3))
+        x = self.up2_attn(self.up2_block(x, x2))
+        x = self.up3_attn(self.up3_block(x, x1))
         x = self.up4(x, x0)
 
         return self.output_proj(x)
+
 
 
 def cosine_beta_schedule(timesteps, s=0.008):
