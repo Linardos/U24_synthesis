@@ -11,12 +11,12 @@ with open('config_l.yaml', 'r') as f:
     config = yaml.safe_load(f)
 
 learning_rate = config['learning_rate']
-timesteps = config.get('timesteps', 1000)  # Number of diffusion steps
+timesteps = config.get('timesteps', 1000)
 label_dim = config.get('label_dim', 4)
-guidance_scale = config.get('guidance_scale', 5.0)  # Strength of classifier-free guidance
+guidance_scale = config.get('guidance_scale', 5.0)
+attention_on = config.get('attention_on', True)
 
 class SinusoidalPositionEmbeddings(nn.Module):
-    """Creates a sinusoidal embedding of diffusion timestep `t`, so the model knows where in the noise schedule it is."""
     def __init__(self, dim):
         super().__init__()
         self.dim = dim
@@ -28,8 +28,6 @@ class SinusoidalPositionEmbeddings(nn.Module):
         embeddings = time[:, None] * embeddings[None, :]
         return torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
 
-
-
 class ResBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, dropout=0.1):
         super().__init__()
@@ -38,7 +36,6 @@ class ResBlock(nn.Module):
         self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size, padding=1)
         self.norm2 = nn.GroupNorm(8, out_channels)
         self.dropout = nn.Dropout(dropout)
-
         self.skip = nn.Conv2d(in_channels, out_channels, 1) if in_channels != out_channels else nn.Identity()
 
     def forward(self, x):
@@ -70,37 +67,47 @@ class Up(nn.Module):
         x = torch.cat([x, skip], dim=1)
         return self.block(x)
 
-class SelfAttention2d(nn.Module):
-    def __init__(self, in_channels, num_heads=4):
+class SpatialLinearAttention(nn.Module):
+    def __init__(self, dim, heads=4, dim_head=32):
         super().__init__()
-        self.in_channels = in_channels
-        self.num_heads = num_heads
-        self.norm = nn.GroupNorm(8, in_channels)
-        self.qkv = nn.Conv1d(in_channels, in_channels * 3, kernel_size=1)
-        self.out_proj = nn.Conv1d(in_channels, in_channels, kernel_size=1)
+        self.scale = dim_head ** -0.5
+        self.heads = heads
+        hidden_dim = dim_head * heads
+        self.to_qkv = nn.Conv2d(dim, hidden_dim * 3, 1, bias=False)
+        self.to_out = nn.Conv2d(hidden_dim, dim, 1)
 
     def forward(self, x):
-        B, C, H, W = x.shape
-        x = self.norm(x)
-        x = x.view(B, C, H * W)  # [B, C, HW]
+        b, c, h, w = x.shape
+        qkv = self.to_qkv(x).chunk(3, dim=1)
+        q, k, v = map(lambda t: t.reshape(b, self.heads, -1, h * w), qkv)
+        q = q.softmax(dim=-2)
+        k = k.softmax(dim=-1)
+        q = q * self.scale
+        context = torch.einsum('b h d n, b h e n -> b h d e', k, v)
+        out = torch.einsum('b h d e, b h d n -> b h e n', context, q)
+        out = out.reshape(b, -1, h, w)
+        return self.to_out(out)
 
-        qkv = self.qkv(x)  # [B, 3C, HW]
-        q, k, v = torch.chunk(qkv, 3, dim=1)
+class Residual(nn.Module):
+    def __init__(self, fn):
+        super().__init__()
+        self.fn = fn
 
-        # Reshape for multi-head attention
-        def reshape(x):  # [B, C, N] → [B, heads, C // heads, N]
-            return x.view(B, self.num_heads, C // self.num_heads, H * W)
+    def forward(self, x):
+        return self.fn(x) + x
 
-        q, k, v = map(reshape, (q, k, v))
-        attn = torch.einsum('bhcn,bhcm->bhnm', q, k) * (C // self.num_heads) ** -0.5
-        attn = torch.softmax(attn, dim=-1)
 
-        out = torch.einsum('bhnm,bhcm->bhcn', attn, v).contiguous()
-        out = out.view(B, C, H * W)
-        out = self.out_proj(out)
-        out = out.view(B, C, H, W)
-        res = x.view(B, C, H, W)
-        return res + out
+class MaybeAttentionBlock(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.enabled = attention_on
+        if self.enabled:
+            self.attn = Residual(SpatialLinearAttention(dim))
+        else:
+            self.attn = nn.Identity()
+
+    def forward(self, x):
+        return self.attn(x)
 
 class DenoiseModel(nn.Module):
     def __init__(self, label_dim, time_dim=256):
@@ -113,26 +120,24 @@ class DenoiseModel(nn.Module):
             nn.ReLU()
         )
 
-        # Initial conv
         self.input_proj = nn.Conv2d(2, 64, kernel_size=3, padding=1)
 
-        # Downsampling path
-        self.down1 = Down(64, 128)
-        self.down2 = Down(128, 256)
+        self.down1 = nn.Sequential(Down(64, 128), MaybeAttentionBlock(128))
+        self.down2 = nn.Sequential(Down(128, 256), MaybeAttentionBlock(256))
+        self.down3 = nn.Sequential(Down(256, 512), MaybeAttentionBlock(512))
+        self.down4 = nn.Sequential(Down(512, 1024), MaybeAttentionBlock(1024))
 
-        # Bottleneck
-        # self.mid = ResBlock(256, 256)
         self.mid = nn.Sequential(
-            ResBlock(256, 256),
-            SelfAttention2d(256),
-            ResBlock(256, 256)
+            ResBlock(1024, 1024),
+            MaybeAttentionBlock(1024),
+            ResBlock(1024, 1024)
         )
 
-        # Upsampling path
-        self.up1 = Up(256 + 128, 128)
-        self.up2 = Up(128 + 64, 64)
+        self.up1 = nn.Sequential(Up(1024 + 512, 512), MaybeAttentionBlock(512))
+        self.up2 = nn.Sequential(Up(512 + 256, 256), MaybeAttentionBlock(256))
+        self.up3 = nn.Sequential(Up(256 + 128, 128), MaybeAttentionBlock(128))
+        self.up4 = Up(128 + 64, 64)
 
-        # Final projection
         self.output_proj = nn.Conv2d(64, 1, kernel_size=3, padding=1)
 
     def forward(self, x, t, labels=None):
@@ -146,86 +151,26 @@ class DenoiseModel(nn.Module):
         else:
             label_emb = self.unconditional_embedding.expand(x.size(0), -1)
 
-        emb = time_emb + label_emb  # [batch, time_dim]
+        emb = time_emb + label_emb
         emb = emb[:, :, None, None].expand(-1, -1, x.shape[2], x.shape[3])
-        emb = emb.mean(dim=1, keepdim=True)  # Reduce to 1 channel
-        x = torch.cat([x, emb], dim=1)  # Concatenate with noisy image
+        emb = emb.mean(dim=1, keepdim=True)
+        x = torch.cat([x, emb], dim=1)
 
-        # UNet-style forward pass
         x0 = self.input_proj(x)
         x1 = self.down1(x0)
         x2 = self.down2(x1)
-        x_mid = self.mid(x2)
-        x = self.up1(x_mid, x1)
-        x = self.up2(x, x0)
+        x3 = self.down3(x2)
+        x4 = self.down4(x3)
+
+        x_mid = self.mid(x4)
+
+        x = self.up1(x_mid, x3)
+        x = self.up2(x, x2)
+        x = self.up3(x, x1)
+        x = self.up4(x, x0)
+
         return self.output_proj(x)
 
-
-# class DenoiseModel(nn.Module):
-#     """
-#     A lightweight U-Net-like model for denoising, with classifier-free guidance.
-#     Takes in a noisy image, timestep `t`, and optional labels.
-#     Concatenates image + timestep + label embedding and predicts the noise.
-#     """
-#     def __init__(self, label_dim, time_dim=256):
-#         super().__init__()
-#         self.label_dim = label_dim
-#         self.label_embedding = nn.Embedding(label_dim, time_dim)
-#         self.unconditional_embedding = nn.Parameter(torch.randn(1, time_dim))
-#         self.time_mlp = nn.Sequential(
-#             SinusoidalPositionEmbeddings(time_dim),
-#             nn.Linear(time_dim, time_dim),
-#             nn.ReLU()
-#         )
-
-#         self.conv1 = nn.Conv2d(2, 64, 3, padding=1)
-#         self.conv2 = nn.Conv2d(64, 128, 3, padding=1)
-#         self.conv3 = nn.Conv2d(128, 64, 3, padding=1)
-#         self.conv4 = nn.Conv2d(64, 1, 3, padding=1)
-
-#         self.activation = nn.SiLU()
-
-#     def forward(self, x, t, labels=None):
-#         # Time embeddings
-#         time_emb = self.time_mlp(t)
-
-#         if labels is not None and isinstance(labels, torch.Tensor) and (labels != -1).any():
-#             valid_labels = labels.clone()
-#             unconditional_mask = (labels == -1).unsqueeze(1)
-            
-#             # Ensure valid indices for label embedding
-#             label_emb = self.label_embedding(torch.clamp(valid_labels, min=0))
-            
-#             # Use torch.where to handle conditional/unconditional embeddings
-#             label_emb = torch.where(unconditional_mask, self.unconditional_embedding, label_emb)
-#         else:
-#             # Pure unconditional embedding
-#             label_emb = self.unconditional_embedding.expand(x.size(0), -1)
-
-#         # Combine time and label embeddings
-#         emb = time_emb[:, :, None, None] + label_emb[:, :, None, None]
-
-#         # print("Embedding Shape Before Expansion:", emb.shape)  # Should be [batch_size, 1, 1, 1]
-        
-#         # print("Embedding Shape Before Expansion:", emb.shape)  # Should be [batch_size, 256, 1, 1]
-#         # Ensure emb has the correct shape (batch_size, 1, 256, 256) before concatenation
-#         # emb = emb.expand(-1, 1, x.shape[2], x.shape[3])  # Change -1 to 1 for channels
-#         emb = emb.permute(0, 2, 3, 1).expand(-1, x.shape[2], x.shape[3], -1).permute(0, 3, 1, 2)
-
-#         # Instead of expanding to 256 channels, reduce it to 1 channel
-#         emb = emb.mean(dim=1, keepdim=True)  # Reduce 256 channels → 1 channel
-
-#         # print("Embedding Shape After Expansion:", emb.shape)  # Should be [batch_size, 256, 256, 256]
-        
-#         # Concatenate the embedding with the image
-#         # print("Input Shape before concat:", x.shape)  # Should be [batch_size, 1, 256, 256]
-#         x = torch.cat((x, emb), dim=1)  # Should now have exactly 2 channels
-#         # print("Final Input Shape to Conv1:", x.shape)  # Should be [batch_size, 2, 256, 256]
-
-#         x = self.activation(self.conv1(x))
-#         x = self.activation(self.conv2(x))
-#         x = self.activation(self.conv3(x))
-#         return self.conv4(x)
 
 def cosine_beta_schedule(timesteps, s=0.008):
     """Cosine schedule for beta values (noise variance), as used in improved DDPM. Cosine schedules tend to result in better quality than linear ones."""
@@ -336,27 +281,6 @@ class DDPM(pl.LightningModule):
                     # Normalize for TensorBoard
                     self.logger.experiment.add_images(f"Denoised_t{t_val}", (reconstructed[:grid_size] + 1) / 2, global_step=self.current_epoch)
 
-
-        # **Log Noisy and Denoised Images to TensorBoard**
-        # if batch_idx % 500 == 0:
-        #     # Reconstruct x₀ from predicted noise
-        #     alpha_hat_t = self.alpha_hat[t].to(t.device)[:, None, None, None]
-        #     sqrt_alpha_hat = torch.sqrt(alpha_hat_t)
-        #     sqrt_one_minus_alpha_hat = torch.sqrt(1.0 - alpha_hat_t)
-
-        #     reconstructed = (noisy_imgs - sqrt_one_minus_alpha_hat * predicted_noise) / sqrt_alpha_hat
-
-        #     # log them
-        #     grid_size = min(8, batch_size)
-        #     imgs_to_show = (imgs[:grid_size] + 1) / 2
-        #     noisy_to_show = (noisy_imgs[:grid_size] + 1) / 2
-        #     denoised_to_show = reconstructed[:grid_size]  # Now truly denoised!
-
-        #     self.logger.experiment.add_images("Original Images", imgs_to_show, global_step=self.current_epoch)
-        #     self.logger.experiment.add_images("Noisy Images", noisy_to_show, global_step=self.current_epoch)
-        #     self.logger.experiment.add_images("Denoised Images", denoised_to_show, global_step=self.current_epoch)
-
-
         return loss
 
     def q_sample(self, x_start, t, noise):
@@ -364,11 +288,6 @@ class DDPM(pl.LightningModule):
         sqrt_alpha_hat = self.alpha_hat[t].to(t.device)[:, None, None, None]
         sqrt_one_minus_alpha_hat = (1.0 - self.alpha_hat[t].to(t.device))[:, None, None, None]
         return sqrt_alpha_hat * x_start + sqrt_one_minus_alpha_hat * noise
-
-
-    # def configure_optimizers(self):
-    #     optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-    #     return optimizer
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
@@ -387,9 +306,3 @@ class DDPM(pl.LightningModule):
                 'interval': 'epoch'
             }
         }
-
-# model = DDPM(label_dim=4, learning_rate=1e-4, timesteps=1000, guidance_scale=5.0, verbose=True)
-
-# Check model device and parameters
-# print("Model Parameters:", sum(p.numel() for p in model.parameters()))
-# print("Model Device:", next(model.parameters()).device)

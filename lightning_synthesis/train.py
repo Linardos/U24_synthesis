@@ -60,13 +60,13 @@ checkpoint_callback = ModelCheckpoint(
     monitor='train_loss', # we don't use a validation since we only care to reconstruct the entire in-distribution data
     mode='min'
 )
-early_stopping_callback = EarlyStopping(monitor='train_loss', patience=10, mode='min')
+early_stopping_callback = EarlyStopping(monitor='train_loss', patience=15, mode='min')
 lr_monitor = LearningRateMonitor(logging_interval='epoch')
 
 # Set up Trainer
 trainer = pl.Trainer(
     max_epochs=num_epochs,
-    precision=16,
+    precision=32,
     accelerator='gpu' if torch.cuda.is_available() else 'cpu',
     logger=tb_logger,
     callbacks=[checkpoint_callback, early_stopping_callback, lr_monitor],

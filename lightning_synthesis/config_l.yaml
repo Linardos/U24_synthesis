@@ -18,11 +18,12 @@ val_split: 0.2  # Fraction of data used for validation
 
 # Model Selection
 model_type: 'ddpm'  # Choose from ['ddpm', 'cvae']
+attention_on: True # if you want attention blocks this must be True.
 # generator_arch: 'resnet'  # Options: ['mlp', 'cnn', 'resnet']
 
 # Experiment Tracking
 experiment_number: 1  # Update as needed
-experiment_name: '017_Lightning_synthesis_DDPM_Attention-efficient'
+experiment_name: '020_Lightning_synthesis_DDPM_PerLayerAttention-SoTAdepth'
 model_dir: 'saved_models'  # Directory to save model checkpoints
 
 # Evaluation & Logging
