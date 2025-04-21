@@ -3,11 +3,13 @@ root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean/train_downsampled'  # Update based 
 data_dir: 'original'  # Choose from ['original', 'stylegan_256x256', 'vqvae']
 
 # Synthesis-Specific Parameters
-num_classes: 4  # Number of label conditions for synthesis
-latent_dim: 64  # Optimized for CVAE
-label_dim: 4  # Number of unique labels for conditional synthesis
+# latent_dim: 64  # Optimized for CVAE
+label_dim: 4 #4  # Number of unique labels for conditional synthesis, set to 10 for mnist, 4 for embed
+data_mode: 'embed' # embed
+resize_dim: 64 # Resize data to 64x64
 
 # Training Hyperparameters
+loss_type: l1 # mse
 batch_size: 8  # Increased for more stable gradients
 learning_rate: 0.00001  # Optimized for CVAE
 # weight_decay: 0.0001  # Slightly increased regularization
@@ -16,14 +18,15 @@ early_stopping_patience: 20
 pretrained: False  # Typically False for synthesis models since they’re trained from scratch
 val_split: 0.2  # Fraction of data used for validation
 
-# Model Selection
+# Model Configs
 model_type: 'ddpm'  # Choose from ['ddpm', 'cvae']
 attention_on: True # if you want attention blocks this must be True.
+dynamic_thresholding: False
 # generator_arch: 'resnet'  # Options: ['mlp', 'cnn', 'resnet']
 
 # Experiment Tracking
 experiment_number: 1  # Update as needed
-experiment_name: '020_Lightning_synthesis_DDPM_PerLayerAttention-SoTAdepth'
+experiment_name: '026_DDPM_revamped'
 model_dir: 'saved_models'  # Directory to save model checkpoints
 
 # Evaluation & Logging

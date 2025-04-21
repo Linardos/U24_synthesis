@@ -3,7 +3,7 @@ import nibabel as nib
 import torch
 from torch.utils.data import Dataset, DataLoader
 import yaml
-from torchvision import transforms
+from torchvision import transforms, datasets
 import pytorch_lightning as pl
 
 # Load configuration
@@ -14,6 +14,9 @@ with open('config_l.yaml', 'r') as f:
 root_dir = config['root_dir']
 data_dir = config['data_dir']
 full_data_path = os.path.join(root_dir, data_dir)
+
+data_mode = config.get('data_mode', 'embed')  # 'embed', 'mnist', 'cifar'
+print(f"Loading data: {data_mode}")
 
 class NiftiSynthesisDataset(Dataset):
     def __init__(self, full_data_path, transform=None, samples_per_class=None):
@@ -93,22 +96,77 @@ class NiftiSynthesisDataset(Dataset):
         return img_tensor, torch.tensor(label, dtype=torch.long)
 
 # PyTorch Lightning DataModule
+# class SynthesisDataModule(pl.LightningDataModule):
+#     def __init__(self, batch_size=8, transform=None, samples_per_class=None):
+#         super().__init__()
+#         self.batch_size = batch_size
+#         self.transform = transform
+#         self.samples_per_class = samples_per_class
+
+#     # def setup(self, stage=None):
+#     #     self.dataset = NiftiSynthesisDataset(full_data_path, transform=self.transform, 
+#     #                                           samples_per_class=self.samples_per_class)
+#     def setup(self, stage=None):
+#         self.dataset = NiftiSynthesisDataset(full_data_path, transform=self.transform, 
+#                                                 samples_per_class=self.samples_per_class)
+
+#     def train_dataloader(self):
+#         return DataLoader(self.dataset, batch_size=self.batch_size, shuffle=True)
+
+#     def val_dataloader(self):
+#         return DataLoader(self.dataset, batch_size=self.batch_size, shuffle=False)
+
+#     def test_dataloader(self):
+#         return DataLoader(self.dataset, batch_size=self.batch_size, shuffle=False)
 class SynthesisDataModule(pl.LightningDataModule):
-    def __init__(self, batch_size=8, transform=None, samples_per_class=None):
+    def __init__(
+        self,
+        full_path,
+        batch_size=8,
+        transform=None,
+        samples_per_class=None,
+        num_workers=4,
+    ):
         super().__init__()
-        self.batch_size = batch_size
+        self.save_hyperparameters()
         self.transform = transform
         self.samples_per_class = samples_per_class
 
-    def setup(self, stage=None):
-        self.dataset = NiftiSynthesisDataset(full_data_path, transform=self.transform, 
-                                              samples_per_class=self.samples_per_class)
+    def prepare_data(self) -> None:
+        full_path = self.hparams.full_path
+        if not os.path.isdir(full_path):
+            raise FileNotFoundError(full_path)
 
+    def setup(self, stage) -> None:
+        # Build splits once, or whenever stage=="fit" (Lightning calls twice)
+        if stage in ("fit", None):
+            full_path = self.hparams.full_path
+            full_ds = NiftiSynthesisDataset(
+                full_path,
+                transform=self.transform,
+                samples_per_class=self.samples_per_class,
+            )
+            train_sz = int(0.9 * len(full_ds))
+            val_sz   = len(full_ds) - train_sz
+            self.train_ds, self.val_ds = torch.utils.data.random_split(
+                full_ds, [train_sz, val_sz],
+                generator=torch.Generator().manual_seed(42),
+            )
+
+    # dataloaders ----------------------------------------------------------
     def train_dataloader(self):
-        return DataLoader(self.dataset, batch_size=self.batch_size, shuffle=True)
+        return DataLoader(
+            self.train_ds,
+            batch_size=self.hparams.batch_size,
+            shuffle=True,
+            num_workers=self.hparams.num_workers,
+        )
 
     def val_dataloader(self):
-        return DataLoader(self.dataset, batch_size=self.batch_size, shuffle=False)
+        return DataLoader(
+            self.val_ds,
+            batch_size=self.hparams.batch_size,
+            shuffle=False,
+            num_workers=self.hparams.num_workers,
+        )
 
-    def test_dataloader(self):
-        return DataLoader(self.dataset, batch_size=self.batch_size, shuffle=False)
