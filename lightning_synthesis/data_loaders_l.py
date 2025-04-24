@@ -84,16 +84,27 @@ class NiftiSynthesisDataset(Dataset):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        file_path, label = self.samples[idx]
-        nifti_img = nib.load(file_path)
-        img_array = nifti_img.get_fdata()
-        # Convert the image array to float32 and apply transformations
-        if self.transform:
-            img_tensor = self.transform(img_array)
-        else:
-            img_tensor = torch.tensor(img_array, dtype=torch.float32).unsqueeze(0)  # Fallback if no transform is provided
+        file_path, label = self.samples[idx] # path string!
 
-        return img_tensor, torch.tensor(label, dtype=torch.long)
+        sample = {"image": file_path, "class": label}
+        if self.transform:
+            sample = self.transform(sample)
+
+        # after ToTensord, sample["image"] is a (1,64,64) tensor
+        return sample["image"], torch.tensor(sample["class"], dtype=torch.long)
+
+    # def __getitem__(self, idx):
+    #     file_path, label = self.samples[idx]
+    #     nifti_img = nib.load(file_path)
+    #     img_array = nifti_img.get_fdata()
+    #     # Convert the image array to float32 and apply transformations
+    #     if self.transform:
+    #         img_tensor = self.transform(img_array)
+    #     else:
+    #         img_tensor = torch.tensor(img_array, dtype=torch.float32).unsqueeze(0)  # Fallback if no transform is provided
+
+    #     return {"image":img_tensor, "class":torch.tensor(label, dtype=torch.long)}
+
 
 # PyTorch Lightning DataModule
 # class SynthesisDataModule(pl.LightningDataModule):

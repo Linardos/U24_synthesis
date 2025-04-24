@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 # from unet import UNet
 class DDPM(pl.LightningModule):
 
-    def __init__(self, T: int, noise_predictor: nn.Module, lr: float = 2e-5):
+    def __init__(self, T: int, noise_predictor: nn.Module, lr: float = 2e-4):
         super().__init__()
         self.save_hyperparameters()
         self.T = T #timesteps

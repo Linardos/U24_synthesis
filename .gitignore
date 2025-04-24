@@ -12,3 +12,4 @@ archive
 */inference_results
 *archived*
 *pre-made*
+lightning_synthesis/data/*.tar.gz
