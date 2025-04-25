@@ -1,15 +1,14 @@
 import os
 import yaml
+import shutil
 import numpy as np
 import pytorch_lightning as pl
 from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
 import torch
-from torchvision.utils import save_image
-# from torchvision import transforms
 from monai import transforms as mt
 
-from data_loaders_l import SynthesisDataModule, NiftiSynthesisDataset
+from data_loaders_l import NiftiSynthesisDataset
 from model_architectures import DDPM, UNet, MonaiDDPM 
 
 torch.set_float32_matmul_precision('medium')
@@ -24,14 +23,16 @@ learning_rate = config['learning_rate']
 num_epochs = config['num_epochs']
 label_dim = config.get('label_dim', 4)
 experiment_name = config['experiment_name']
-model_type = config['model_type']
 resize_dim = config.get('resize_dim', False) #set false for no resizing
 # Prepare output directories
 experiment_path = os.path.join('experiments', experiment_name)
 os.makedirs(experiment_path, exist_ok=True)
-# Save a copy of the config for reproducibility
+# Save a copy of the config and other training files for reproducibility
 with open(os.path.join(experiment_path, 'config.yaml'), 'w') as out_f:
     yaml.dump(config, out_f)
+shutil.copyfile('train.py', os.path.join(experiment_path, 'train.py'))
+shutil.copyfile('data_loaders_l.py', os.path.join(experiment_path, 'data_loaders_l.py'))
+shutil.copyfile('./model_architectures/monai_ddpm.py', os.path.join(experiment_path, 'monai_ddpm.py'))
 
 # Define the root directory
 root_dir = config['root_dir']
@@ -59,7 +60,13 @@ train_transforms = mt.Compose(
         # mt.Resized(keys=["image"], spatial_size=[64, 64], mode="bilinear"),
         mt.ScaleIntensityRanged(keys=["image"], a_min=0.0, a_max=255.0, b_min=0.0, b_max=1.0, clip=True),
         mt.ToTensord(keys=["image"]),
-
+        mt.RandLambdad(keys=["class"], prob=0.15, func=lambda x: -1 * torch.ones_like(x)),
+        mt.Lambdad(
+            keys=["class"],
+            func=lambda x: x.clone().detach().to(torch.float32).unsqueeze(0).unsqueeze(0)
+            if isinstance(x, torch.Tensor)
+            else torch.as_tensor(x, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+        )
     ]
 )
 
@@ -77,7 +84,7 @@ tb_logger = pl_loggers.TensorBoardLogger('logs/', name=experiment_name)
 
 checkpoint_callback = ModelCheckpoint(
     dirpath=os.path.join(experiment_path, "checkpoints"),
-    filename=f"{model_type}-{{epoch:02d}}-{{step}}",
+    filename=f"{{epoch:02d}}-{{step}}",
     auto_insert_metric_name=True,
     save_top_k=1,
     monitor="train_loss",
@@ -93,7 +100,7 @@ lr_monitor = LearningRateMonitor(logging_interval='epoch')
 
 # Set up Trainer
 trainer = pl.Trainer(
-    fast_dev_run=False, #set to true for tests
+    fast_dev_run=False,
     max_epochs=num_epochs,
     accelerator="auto",
     precision=32,

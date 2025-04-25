@@ -1,15 +1,14 @@
 import os
 import yaml
+import shutil
 import numpy as np
 import pytorch_lightning as pl
 from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
 import torch
-from torchvision.utils import save_image
-# from torchvision import transforms
 from monai import transforms as mt
 
-from data_loaders_l import SynthesisDataModule, NiftiSynthesisDataset
+from data_loaders_l import NiftiSynthesisDataset
 from model_architectures import DDPM, UNet, MonaiDDPM 
 
 torch.set_float32_matmul_precision('medium')
@@ -27,9 +26,12 @@ resize_dim = config.get('resize_dim', False) #set false for no resizing
 # Prepare output directories
 experiment_path = os.path.join('experiments', experiment_name)
 os.makedirs(experiment_path, exist_ok=True)
-# Save a copy of the config for reproducibility
+# Save a copy of the config, training and data loading scripts for reproducibility
 with open(os.path.join(experiment_path, 'config.yaml'), 'w') as out_f:
     yaml.dump(config, out_f)
+shutil.copyfile('train_progressive.py', os.path.join(experiment_path, 'train_progressive.py'))
+shutil.copyfile('data_loaders_l.py', os.path.join(experiment_path, 'data_loaders_l.py'))
+shutil.copyfile('./model_architectures/monai_ddpm.py', os.path.join(experiment_path, 'monai_ddpm.py'))
 
 # Define the root directory
 root_dir = config['root_dir']
@@ -40,7 +42,7 @@ full_data_path = os.path.join(root_dir, data_dir)
 # 0.  House-keeping: where we save checkpoints for every stage
 # ------------------------------------------------------------------------
 STAGES = [64, 128, 256]           # target “output” resolutions
-EPOCHS = [40, 20, 5]             # how long each stage trains
+EPOCHS = [40, 20, 10]             # how long each stage trains
 CKPT_DIR = os.path.join(experiment_path, "checkpoints")
 
 # ------------------------------------------------------------------------
@@ -90,7 +92,7 @@ for stage, (res, num_epochs) in enumerate(zip(STAGES, EPOCHS), 1):
         # limit_train_batches=0.05,         # Uncomment for dev test
         # limit_val_batches=0.05,           # Uncomment for dev test
         accelerator="auto",
-        precision=32,                      
+        precision=16,
         logger=tb_logger,
         callbacks=[
             ModelCheckpoint(

@@ -16,7 +16,7 @@ num_epochs: 100
 
 # Experiment Tracking
 experiment_number: 1  # Update as needed
-experiment_name: '029_DDPM_MONAI_256x256-progressive'
+experiment_name: '031_DDPM_classifier-free-test'
 model_dir: 'saved_models'  # Directory to save model checkpoints
 
 # Evaluation & Logging
