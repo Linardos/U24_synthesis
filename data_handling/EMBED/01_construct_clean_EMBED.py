@@ -28,7 +28,7 @@ train, test = train_test_split(data, test_size=0.2, random_state=42, stratify=da
 
 # Directory structure
 base_dir = "/mnt/d/Datasets/EMBED/images/"
-output_dir = "/mnt/d/Datasets/EMBED/EMBED_clean"
+output_dir = "/mnt/d/Datasets/EMBED/EMBED_clean_512x512"
 categories = ["benign", "probably_benign", "suspicious", "malignant"]
 
 for split in ["train", "test"]:
@@ -37,7 +37,7 @@ for split in ["train", "test"]:
     print(f"{split.capitalize()} directories created!")
 
 # DICOM-to-NIfTI conversion function
-def convert_dicom_to_nifti(dicom_path, output_path, target_size=(256, 256)):
+def convert_dicom_to_nifti(dicom_path, output_path, target_size=(512, 512)):
     try:
         dicom_data = dcmread(dicom_path)
         pixel_array = dicom_data.pixel_array  # Extract pixel data
@@ -64,27 +64,6 @@ def convert_dicom_to_nifti(dicom_path, output_path, target_size=(256, 256)):
     except Exception as e:
         print(f"Error converting {dicom_path} to NIfTI: {e}")
 
-# Helper function to process files
-# def process_files(df, split):
-#     for _, row in tqdm(df.iterrows(), total=len(df), desc=f"Processing {split} files"):
-#         src = os.path.join(base_dir, os.path.relpath(row["anon_dicom_path"], "/mnt/NAS2/mammo/anon_dicom/"))
-#         category = row["category"]
-
-#         if not os.path.isfile(src):
-#             print(f"File not found: {src}")
-#             continue
-
-#         # Create a folder for the DICOM file with its name
-#         dicom_name = os.path.splitext(os.path.basename(src))[0]  # Extract file name without extension
-#         dest_folder = os.path.join(output_dir, split, category, dicom_name)
-#         os.makedirs(dest_folder, exist_ok=True)
-
-#         # Convert and save the NIfTI file in the folder
-#         nifti_path = os.path.join(dest_folder, "slice.nii.gz")
-#         if os.path.exists(nifti_path):
-#             print(f"Skipping existing file: {nifti_path}")
-#             continue
-#         convert_dicom_to_nifti(src, nifti_path)
 
 def process_single_file(row, split):
     src = os.path.join(base_dir, os.path.relpath(row["anon_dicom_path"], "/mnt/NAS2/mammo/anon_dicom/"))

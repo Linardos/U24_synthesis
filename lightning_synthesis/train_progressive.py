@@ -41,8 +41,8 @@ full_data_path = os.path.join(root_dir, data_dir)
 # ------------------------------------------------------------------------
 # 0.  House-keeping: where we save checkpoints for every stage
 # ------------------------------------------------------------------------
-STAGES = [64, 128, 256]           # target “output” resolutions
-EPOCHS = [40, 20, 10]             # how long each stage trains
+STAGES = [64, 128, 256, 512]           # target “output” resolutions
+EPOCHS = [40, 20, 10, 10]             # how long each stage trains
 CKPT_DIR = os.path.join(experiment_path, "checkpoints")
 
 # ------------------------------------------------------------------------
@@ -60,6 +60,13 @@ def make_loader(spatial, batch):
                                     a_min=0., a_max=255.,
                                     b_min=0., b_max=1., clip=True),
             mt.ToTensord(keys=["image"]),
+            mt.RandLambdad(keys=["class"], prob=0.15, func=lambda x: -1 * torch.ones_like(x)),
+            mt.Lambdad(
+                keys=["class"],
+                func=lambda x: x.clone().detach().to(torch.float32).unsqueeze(0).unsqueeze(0)
+                if isinstance(x, torch.Tensor)
+                else torch.as_tensor(x, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+            )
         ]
     )
     ds = NiftiSynthesisDataset(full_data_path, transform=tfm)
@@ -100,7 +107,7 @@ for stage, (res, num_epochs) in enumerate(zip(STAGES, EPOCHS), 1):
                 filename=f"best_{res}px",
                 save_top_k=1, monitor="train_loss", mode="min"),
             LearningRateMonitor(logging_interval='epoch')],
-        accumulate_grad_batches=4,             # keeps “effective” batch big
+        accumulate_grad_batches=2,             # keeps “effective” batch big
         benchmark=True, deterministic=False,
     )
 
@@ -119,3 +126,6 @@ for stage, (res, num_epochs) in enumerate(zip(STAGES, EPOCHS), 1):
 
     # • remember best ckpt path for next loop iteration
     resume_ckpt = trainer.checkpoint_callback.best_model_path
+
+
+print(f"✅ Experiment {experiment_name} completed.")
