@@ -1,6 +1,7 @@
 import os
 import yaml
 import shutil
+import re
 import numpy as np
 import pytorch_lightning as pl
 from pytorch_lightning import loggers as pl_loggers
@@ -21,10 +22,31 @@ pl.seed_everything(config.get('seed', 42), workers=True)
 batch_size = config['batch_size']
 learning_rate = config['learning_rate']
 label_dim = config.get('label_dim', 4)
-experiment_name = config['experiment_name']
 resize_dim = config.get('resize_dim', False) #set false for no resizing
+
+# ------------------------------------------------------------------------
+# 0a.  House-keeping: define & organize experiment folder
+# ------------------------------------------------------------------------
+# Base directory for all experiments
+base_dir = 'experiments'
+os.makedirs(base_dir, exist_ok=True)
+
+# Get existing experiment directories and find the highest prefix
+existing = [
+    d for d in os.listdir(base_dir)
+    if os.path.isdir(os.path.join(base_dir, d)) and re.match(r'^\d{3}_', d)
+]
+
+if existing:
+    # Extract numeric prefixes
+    nums = [int(re.match(r'^(\d{3})_', name).group(1)) for name in existing]
+    next_num = max(nums) + 1
+else:
+    next_num = 1
+
 # Prepare output directories
-experiment_path = os.path.join('experiments', experiment_name)
+experiment_name = f"{next_num:03}_{config['experiment_name']}"
+experiment_path = os.path.join(base_dir, experiment_name)
 os.makedirs(experiment_path, exist_ok=True)
 # Save a copy of the config, training and data loading scripts for reproducibility
 with open(os.path.join(experiment_path, 'config.yaml'), 'w') as out_f:
@@ -39,7 +61,7 @@ data_dir = config['data_dir']
 full_data_path = os.path.join(root_dir, data_dir)
 
 # ------------------------------------------------------------------------
-# 0.  House-keeping: where we save checkpoints for every stage
+# 0b.  House-keeping: where we save checkpoints for every stage
 # ------------------------------------------------------------------------
 STAGES = [64, 128, 256, 512]           # target “output” resolutions
 EPOCHS = [40, 20, 10, 10]             # how long each stage trains
@@ -82,6 +104,8 @@ model = MonaiDDPM(lr=learning_rate, T=1000)
 # ------------------------------------------------------------------------
 # 3.  Loop over stages – fit, swap DataLoader, resume
 # ------------------------------------------------------------------------
+
+print(f"Initiating Experiment {experiment_name}...")
 resume_ckpt = None          # path of last stage’s best model
 for stage, (res, num_epochs) in enumerate(zip(STAGES, EPOCHS), 1):
 
@@ -94,10 +118,10 @@ for stage, (res, num_epochs) in enumerate(zip(STAGES, EPOCHS), 1):
 
     # • new Trainer each time – cheapest way to change max_epochs / callbacks
     trainer = pl.Trainer(
-        max_epochs=num_epochs,            # Comment out for dev test
-        # max_epochs=3,                     # Uncomment for dev test
-        # limit_train_batches=0.05,         # Uncomment for dev test
-        # limit_val_batches=0.05,           # Uncomment for dev test
+        # max_epochs=num_epochs,            # Comment out for dev test
+        max_epochs=3,                     # Uncomment for dev test
+        limit_train_batches=0.02,         # Uncomment for dev test
+        limit_val_batches=0.02,           # Uncomment for dev test
         accelerator="auto",
         precision=16,
         logger=tb_logger,

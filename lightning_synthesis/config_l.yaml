@@ -13,11 +13,9 @@ batch_size: 8  # Increased for more stable gradients
 learning_rate: 0.00001
 num_epochs: 100  
 
-# Model Configs
-
 # Experiment Tracking
-experiment_number: 1  # Update as needed
-experiment_name: '031_DDPM_classifier-free-test'
+# experiment_name: 'cDDPM_512x512-test-prog'
+experiment_name: 'quicktest'
 model_dir: 'saved_models'  # Directory to save model checkpoints
 
 # Evaluation & Logging

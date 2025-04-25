@@ -86,7 +86,7 @@ def convert_dicom_to_nifti(dicom_path, output_path, target_size=(512, 512)):
         nib.save(Nifti1Image(volume, np.eye(4)), output_path)
         print(f"Converted: {output_path}")
     except Exception as e:
-        print(f"Error {dicom_path} → {e}")
+        print(f"❌ {dicom_path} → {e}")
 
 # ------------------------------------------------------------
 # 5.  Worker helpers
