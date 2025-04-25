@@ -4,14 +4,15 @@ import shutil
 from tqdm import tqdm
 
 # Define source and target directories
-source_base_dir = "/mnt/d/Datasets/EMBED/EMBED_clean/train/original"
-target_base_dir = "/mnt/d/Datasets/EMBED/EMBED_clean/train_downsampled/original"
+source_base_dir = "/mnt/d/Datasets/EMBED/EMBED_clean_512x512/train/original"
+target_base_dir = "/mnt/d/Datasets/EMBED/EMBED_clean_512x512/train_3221/original"
 
 # Categories and the number of samples to copy
+# 3:2:2:1 matching, with malignant fixed at 1364
 categories = {
-    "benign": 16000,
-    "probably_benign": 8000,
-    "suspicious": 6000,
+    "benign": 4092,
+    "probably_benign": 2728,
+    "suspicious": 2728,
     "malignant": None  # Copy all
 }
 

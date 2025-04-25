@@ -1,6 +1,6 @@
 # Dataset Paths
 # root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean/train_downsampled'
-root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_512x512/train'  # Update based on your dataset
+root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_512x512/train_3221'  # Update based on your dataset
 data_dir: 'original'
 
 # Synthesis-Specific Parameters
