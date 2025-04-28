@@ -3,6 +3,10 @@ import yaml
 import shutil
 import re
 import numpy as np
+from pathlib import Path
+import glob
+import time
+
 import pytorch_lightning as pl
 from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
@@ -10,7 +14,7 @@ import torch
 from monai import transforms as mt
 
 from data_loaders_l import NiftiSynthesisDataset
-from model_architectures import DDPM, UNet, MonaiDDPM 
+from model_architectures import DDPM, UNet, MonaiDDPM, MonaiDDPM_unconditional
 
 torch.set_float32_matmul_precision('medium')
 # Load configuration
@@ -26,8 +30,12 @@ label_dim = config.get('label_dim', 4)
 resize_dim = config.get('resize_dim', False) #set false for no resizing
 # Prepare output directories
 # Base directory for all experiments
-base_dir = 'experiments'
-os.makedirs(base_dir, exist_ok=True)
+base_dir = Path("experiments")
+base_dir.mkdir(exist_ok=True)
+
+# ----------------------------------------------------------------------
+#  0. EXPERIMENT FOLDER -- reuse or create
+# ----------------------------------------------------------------------
 
 # Get existing experiment directories and find the highest prefix
 existing = [
@@ -42,18 +50,47 @@ if existing:
 else:
     next_num = 1
 
-# Prepare output directories
-experiment_name = f"{next_num:03}_{config['experiment_name']}"
-experiment_path = os.path.join(base_dir, experiment_name)
-os.makedirs(experiment_path, exist_ok=True)
-# Save a copy of the config, training and data loading scripts for reproducibility
-with open(os.path.join(experiment_path, 'config.yaml'), 'w') as out_f:
-    yaml.dump(config, out_f)
-shutil.copyfile('train.py', os.path.join(experiment_path, 'train.py'))
-shutil.copyfile('data_loaders_l.py', os.path.join(experiment_path, 'data_loaders_l.py'))
-shutil.copyfile('./model_architectures/monai_ddpm.py', os.path.join(experiment_path, 'monai_ddpm.py'))
+cfg_exp_name = config["experiment_name"]          
+exp_dir_manual = base_dir / cfg_exp_name
 
-# Define the root directory
+if exp_dir_manual.exists():
+    # if an existing experiment name has been given, continue training
+    print(f"⚠️  experiment folder '{cfg_exp_name}' already exists – will resume if possible")
+    experiment_name = cfg_exp_name
+    experiment_path = exp_dir_manual
+else:
+    # create a new experiment and copy current set up
+    existing = [d for d in base_dir.iterdir() if d.is_dir() and d.name[:3].isdigit()]
+    next_num = (max(int(d.name[:3]) for d in existing) + 1) if existing else 1
+    experiment_name = f"{next_num:03d}_{cfg_exp_name}_{resize_dim}x{resize_dim}"
+    experiment_path = base_dir / experiment_name
+    experiment_path.mkdir(exist_ok=True)
+    
+    with open(os.path.join(experiment_path, 'config.yaml'), 'w') as out_f:
+        yaml.dump(config, out_f)
+    shutil.copyfile('train.py', os.path.join(experiment_path, 'train.py'))
+    shutil.copyfile('data_loaders_l.py', os.path.join(experiment_path, 'data_loaders_l.py'))
+    shutil.copyfile('./model_architectures/monai_ddpm.py', os.path.join(experiment_path, 'monai_ddpm.py'))
+
+
+# Prepare output directories
+# experiment_name = f"{next_num:03}_{config['experiment_name']}_{resize_dim}x{resize_dim}"
+# experiment_path = os.path.join(base_dir, experiment_name)
+# os.makedirs(experiment_path, exist_ok=True)
+# Save a copy of the config, training and data loading scripts for reproducibility
+# with open(os.path.join(experiment_path, 'config.yaml'), 'w') as out_f:
+#     yaml.dump(config, out_f)
+# shutil.copyfile('train.py', os.path.join(experiment_path, 'train.py'))
+# shutil.copyfile('data_loaders_l.py', os.path.join(experiment_path, 'data_loaders_l.py'))
+# shutil.copyfile('./model_architectures/monai_ddpm.py', os.path.join(experiment_path, 'monai_ddpm.py'))
+
+
+
+# ----------------------------------------------------------------------
+#  1. DATA HANDLING
+# ----------------------------------------------------------------------
+
+# Define the data path directory
 root_dir = config['root_dir']
 data_dir = config['data_dir']
 full_data_path = os.path.join(root_dir, data_dir)
@@ -70,13 +107,12 @@ full_data_path = os.path.join(root_dir, data_dir)
 # train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 # UNCOMMENT FOR SANITY CHECK ====
 
-
 train_transforms = mt.Compose(
     [
         mt.LoadImaged(keys=["image"], image_only=True),
         mt.SqueezeDimd(keys=["image"], dim=-1), # (H,W,1) → (H,W)
         mt.EnsureChannelFirstd(keys=["image"]), # (1,H,W)
-        # mt.Resized(keys=["image"], spatial_size=[64, 64], mode="bilinear"),
+        mt.Resized(keys=["image"], spatial_size=[resize_dim, resize_dim], mode="bilinear"),
         mt.ScaleIntensityRanged(keys=["image"], a_min=0.0, a_max=255.0, b_min=0.0, b_max=1.0, clip=True),
         mt.ToTensord(keys=["image"]),
         mt.RandLambdad(keys=["class"], prob=0.15, func=lambda x: -1 * torch.ones_like(x)),
@@ -95,8 +131,46 @@ img_batch, _ = next(iter(train_loader))
 print(img_batch.shape, img_batch.min().item(), img_batch.max().item())
 
 
-model = MonaiDDPM(lr=learning_rate, T=1000)
-print("Model initialized & EMBED loaded. Sanity check (batch min/max/shape):")
+# ----------------------------------------------------------------------
+# 2. MODEL: resume checkpoint or fresh start
+# ----------------------------------------------------------------------
+
+def find_latest_ckpt(exp_dir):
+    """Return newest .ckpt file inside <exp_dir>/checkpoints (or None)."""
+    ckpt_dir = exp_dir / "checkpoints"
+    if not ckpt_dir.is_dir():
+        return None
+    ckpts = list(ckpt_dir.glob("*.ckpt"))
+    if not ckpts:
+        return None
+    # sort by modification time, newest first
+    ckpts.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    return ckpts[0]
+
+resume_ckpt = find_latest_ckpt(experiment_path)
+if resume_ckpt:
+    print(f"🔄  resuming from checkpoint: {resume_ckpt}")
+    if config["conditional"]:
+        model = MonaiDDPM.load_from_checkpoint(resume_ckpt)
+    else:
+        model = MonaiDDPM_unconditional.load_from_checkpoint(resume_ckpt)
+else:
+    print("🆕  no checkpoint found – starting from scratch")
+    if config["conditional"]:
+        model = MonaiDDPM(lr=learning_rate, T=1000)
+    else:
+        model = MonaiDDPM_unconditional(lr=learning_rate, T=1000)
+
+# if config['conditional']:
+#     model = MonaiDDPM(lr=learning_rate, T=1000)
+# else:
+#     model = MonaiDDPM_unconditional(lr=learning_rate, T=1000)
+
+print(f"Model initialized & EMBED loaded. Initiating experiment {experiment_name}")
+
+# ----------------------------------------------------------------------
+# 3.  LIGHTNING TRAINER
+# ----------------------------------------------------------------------
 
 # Set up callbacks
 tb_logger = pl_loggers.TensorBoardLogger('logs/', name=experiment_name)
@@ -119,7 +193,7 @@ lr_monitor = LearningRateMonitor(logging_interval='epoch')
 
 # Set up Trainer
 trainer = pl.Trainer(
-    fast_dev_run=True,
+    fast_dev_run=False,
     max_epochs=num_epochs,
     accelerator="auto",
     precision=16,
@@ -128,7 +202,8 @@ trainer = pl.Trainer(
     enable_progress_bar=True,
     num_sanity_val_steps=0,
     gradient_clip_val=1.0,
-    accumulate_grad_batches=4
+    accumulate_grad_batches=4,
+    **({"resume_from_checkpoint": resume_ckpt} if resume_ckpt else {})
     )
 
 

@@ -29,6 +29,7 @@ class MonaiDDPM(pl.LightningModule):
         self.inferer   = DiffusionInferer(self.scheduler)
         self.lr        = lr
         self.save_hyperparameters()
+        print("Initialized conditional model.")
 
     # Lightning uses whatever you return from forward in predict_step / sampling
     def forward(self, x, t):                       # mimic your old API
@@ -102,16 +103,18 @@ class MonaiDDPM_unconditional(pl.LightningModule):
             spatial_dims=2,
             in_channels=1,
             out_channels=1,
-            num_channels=(128, 256, 256),
-            attention_levels=(False, True, True),
-            num_res_blocks=1,
-            num_head_channels=256,
+            num_channels=(128, 256, 512, 512),   # four levels instead of three
+            attention_levels=(False, True, True, True),
+            num_res_blocks=2,                    # >1 res-block per level helps
+            num_head_channels=64,                # spread attention across more heads
+            use_flash_attention=True,
         )
         # --- diffusion utilities --------------------------------------------
         self.scheduler = DDPMScheduler(num_train_timesteps=T)
         self.inferer   = DiffusionInferer(self.scheduler)
         self.lr        = lr
         self.save_hyperparameters()
+        print("Initialized unconditional model.")
 
     # Lightning uses whatever you return from forward in predict_step / sampling
     def forward(self, x, t):                       # mimic your old API

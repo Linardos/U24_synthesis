@@ -7,6 +7,7 @@ data_dir: 'original'
 label_dim: 4 #4  # Number of unique labels for conditional synthesis, set to 10 for mnist, 4 for embed
 data_mode: 'embed' # embed
 resize_dim: 64 # Resize data to 64x64
+conditional: False
 
 # Training Hyperparameters
 batch_size: 8  # Increased for more stable gradients
@@ -14,9 +15,8 @@ learning_rate: 0.00001
 num_epochs: 100  
 
 # Experiment Tracking
-experiment_name: 'cDDPM_256x256-test-prog'
-# experiment_name: 'quicktest'
-model_dir: 'saved_models'  # Directory to save model checkpoints
+experiment_name: 'DDPM_deeper_unconditional'
+# experiment_name: '044_DDPM_deeper_128x128' # use suffix and full existing name to continue from checkpoint
 
 # Evaluation & Logging
 sanity_check: False
