@@ -63,8 +63,8 @@ full_data_path = os.path.join(root_dir, data_dir)
 # ------------------------------------------------------------------------
 # 0b.  House-keeping: where we save checkpoints for every stage
 # ------------------------------------------------------------------------
-STAGES = [64, 128, 256, 512]           # target “output” resolutions
-EPOCHS = [40, 20, 10, 10]             # how long each stage trains
+STAGES = [64, 128, 256]           # target “output” resolutions
+EPOCHS = [40, 20, 10]             # how long each stage trains
 CKPT_DIR = os.path.join(experiment_path, "checkpoints")
 
 # ------------------------------------------------------------------------
