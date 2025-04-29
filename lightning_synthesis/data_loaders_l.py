@@ -1,5 +1,4 @@
 import os
-import nibabel as nib
 import torch
 from torch.utils.data import Dataset, DataLoader
 import yaml

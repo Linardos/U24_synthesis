@@ -15,10 +15,10 @@ class MonaiDDPM(pl.LightningModule):
             spatial_dims=2,
             in_channels=1,
             out_channels=1,
-            num_channels=(128, 256, 256),
-            attention_levels=(False, True, True),
-            num_res_blocks=1,
-            num_head_channels=256,
+            num_channels=(64, 128, 256, 512, 512),
+            attention_levels=(False, False, True, True, True),
+            num_res_blocks=2,
+            num_head_channels=64,
             use_flash_attention=True,
             with_conditioning=True,
             cross_attention_dim=1,
@@ -62,7 +62,7 @@ class MonaiDDPM(pl.LightningModule):
 
     # ---------- sampling helpers ----------------------------------------
     @torch.no_grad()
-    def sample_cfg(self, label=0, N=16, size=64, guidance_scale=4.0):
+    def sample(self, label=0, N=16, size=64, guidance_scale=4.0):
         """
         Class-conditional sampling with classifier-free guidance, MONAI-style batch concat.
         """
@@ -91,7 +91,12 @@ class MonaiDDPM(pl.LightningModule):
             eps = eps_uncond + guidance_scale * (eps_cond - eps_uncond)
             x, _ = self.scheduler.step(eps, t, x)
 
-        return x.clamp(0, 1)     # images in [0,1]
+        # after sampling
+        x = (x + 1) / 2 # <- THIS ASSUMES TRAINING WITH [-1,1] WHICH WE HERE SCALE TO [0,1]
+        x = x.clamp(0, 1)
+        return x
+
+        # return x.clamp(0, 1)     # images in [0,1]
 
 
 

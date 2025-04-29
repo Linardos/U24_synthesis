@@ -113,7 +113,7 @@ train_transforms = mt.Compose(
         mt.SqueezeDimd(keys=["image"], dim=-1), # (H,W,1) → (H,W)
         mt.EnsureChannelFirstd(keys=["image"]), # (1,H,W)
         mt.Resized(keys=["image"], spatial_size=[resize_dim, resize_dim], mode="bilinear"),
-        mt.ScaleIntensityRanged(keys=["image"], a_min=0.0, a_max=255.0, b_min=0.0, b_max=1.0, clip=True),
+        mt.ScaleIntensityd(keys=["image"], minv=-1.0, maxv=1.0), # scale to [-1,1]. Diffusion Models do better if centered on a 0 mean
         mt.ToTensord(keys=["image"]),
         mt.RandLambdad(keys=["class"], prob=0.15, func=lambda x: -1 * torch.ones_like(x)),
         mt.Lambdad(
