@@ -1,112 +1,87 @@
-import os
-import yaml
-import pytorch_lightning as pl
-import torch
-from torchvision import transforms
-from torchvision.utils import save_image
+import os, uuid, numpy as np, torch, nibabel as nib
+from tqdm import tqdm
+from model_architectures import MonaiDDPM
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-from data_loaders_l import SynthesisDataModule
-from model_architectures import DDPM
+torch.manual_seed(2025)   # reproducible noise
 
-# Load configuration
-with open('config_l.yaml', 'r') as f:
-    config = yaml.safe_load(f)
+CONDITIONAL = True
+RESOLUTION = 256
+BATCH = 4       # keep RAM/VRAM sane; adjust to your GPU
+GUIDE_SCALE = 3.0
+T = 1_000     
 
-# Extract parameters from config
-batch_size = config.get('batch_size', 1)
-label_dim = config.get('label_dim', 4)
-experiment_name = config.get('experiment_name', 'default_experiment')
-model_dir = config.get('model_dir', 'saved_models')
+ckpt_path = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/049_cDDPM_depth5_fixedScaling_256x256/checkpoints/epoch=22-step=7843.ckpt"
 
-# Specify checkpoint
-checkpoint_path = os.path.join(model_dir, 'ddpm-epoch=12-train_loss=0.0965.ckpt')
+model = (MonaiDDPM
+         .load_from_checkpoint(ckpt_path, map_location="cpu")   # keep GPU free
+         .half()                                                # weights → fp16
+         .to(device)
+         .eval())
 
-# Set up transform (same as training)
-transform = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Lambda(lambda x: (x - x.min()) / (x.max() - x.min() + 1e-8)),
-    transforms.Normalize((0.5,), (0.5,)),
-    transforms.Lambda(lambda x: x.to(torch.float32))
-])
+# --- where to put the synthetic data ---------------------------------
+# ---------------------------------------------------------------------
+SYN_ROOT = f"/mnt/d/Datasets/EMBED/EMBED_clean_512x512/train_3221/synthetic_guide{GUIDE_SCALE}"
+os.makedirs(SYN_ROOT, exist_ok=True)
+# --- how many of each label do we want? ------------------------------
+target_counts = {
+    'benign':          4092,
+    'probably_benign': 2728,
+    'suspicious':      2728,
+    'malignant':       1364,
+}
 
-# Set up data module for inference
-data_module = SynthesisDataModule(batch_size=batch_size, transform=transform)
-data_module.setup()
+# --- integer id mapping you trained with -----------------------------
+class_labels = {
+    'benign': 0,
+    'malignant': 1,
+    'probably_benign': 2,
+    'suspicious': 3
+}
 
-# Load trained model
-model = DDPM.load_from_checkpoint(
-    checkpoint_path,
-    label_dim=label_dim,
-    learning_rate=0  # Not used at inference
-)
-model.eval()
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-model.to(device)
+# ---------------------------------------------------------------------
+#  GENERATION LOOP
+# ---------------------------------------------------------------------
+for cls_name, n_total in target_counts.items():
+    label_id = class_labels[cls_name]
+    out_class_dir = os.path.join(SYN_ROOT, cls_name)
+    os.makedirs(out_class_dir, exist_ok=True)
 
-# Create output dir
-inference_dir = os.path.join('inference_results', experiment_name)
-os.makedirs(inference_dir, exist_ok=True)
+    generated = 0
+    pbar = tqdm(total=n_total, desc=f"Synth {cls_name:16}")
 
-# Parameters
-num_images_to_generate = 10
-num_timesteps = model.timesteps
+    while generated < n_total:
+        n_batch = min(BATCH, n_total - generated)
 
+        with torch.no_grad(), torch.autocast(device_type="cuda", dtype=torch.float16):
+            imgs = model.sample(
+                label=label_id,
+                N=n_batch,
+                size=RESOLUTION,
+                guidance_scale=GUIDE_SCALE,
+            )                     # (N,1,H,W) in [0,1] float32
 
-def sample_ddpm(model, num_samples, num_timesteps, label=None, guidance_scale=None):
-    device = next(model.parameters()).device
-    img_size = (num_samples, 1, 256, 256)
-    noisy_img = torch.randn(img_size, device=device)
+        # -----------------------------------------------------------------
+        # Save each tensor to .../<class>/<000X>/slice.nii.gz
+        # -----------------------------------------------------------------
+        for img in imgs:
+            idx      = generated + 1          # 1-based running index
+            folder   = f"{idx:04d}"           # 0001, 0002, …
+            sample_dir = os.path.join(out_class_dir, folder)
+            os.makedirs(sample_dir, exist_ok=True)
 
-    if label is not None:
-        label_tensor = torch.full((num_samples,), label, dtype=torch.long, device=device)
-    else:
-        label_tensor = None
+            # convert to uint8 [0,255] and drop channel dim
+            arr = (img.squeeze(0).cpu().numpy() * 255).round().astype(np.uint8)
+            nifti = nib.Nifti1Image(arr, affine=np.eye(4))      # identity affine
+            nib.save(nifti, os.path.join(sample_dir, "slice.nii.gz"))
 
-    for t in reversed(range(num_timesteps)):
-        timestep_tensor = torch.full((num_samples,), t, dtype=torch.long, device=device)
+            generated += 1
+            pbar.update(1)
 
-        # Optional classifier-free guidance block (only if trained with it)
-        if guidance_scale is not None and label_tensor is not None:
-            noise_pred_cond = model(noisy_img, timestep_tensor, label_tensor)
-            noise_pred_uncond = model(noisy_img, timestep_tensor, None)
-            predicted_noise = noise_pred_uncond + guidance_scale * (noise_pred_cond - noise_pred_uncond)
-        else:
-            predicted_noise = model(noisy_img, timestep_tensor, label_tensor)
+            if generated >= n_total:
+                break  # safety when batch > remaining
+    
+    torch.cuda.empty_cache()  # call once per outer loop
+    pbar.close()
 
-        alpha_t = model.alphas[t].to(device)
-        beta_t = model.betas[t].to(device)
-        alpha_hat_t = model.alpha_hat[t].to(device)
-
-        sqrt_alpha_t = torch.sqrt(alpha_t)
-        sqrt_one_minus_alpha_hat = torch.sqrt(1 - alpha_hat_t)
-
-        # Predict x0
-        x0_pred = (noisy_img - sqrt_one_minus_alpha_hat * predicted_noise) / torch.sqrt(alpha_hat_t)
-
-        if t > 0:
-            noise = torch.randn_like(noisy_img, device=device)
-            noisy_img = torch.sqrt(alpha_t) * x0_pred + torch.sqrt(1 - alpha_t) * noise
-        else:
-            noisy_img = x0_pred  # Final step, no noise added
-
-    return torch.clamp(noisy_img, -1, 1)
-
-
-# Generate and save
-generated_images = sample_ddpm(model, num_images_to_generate, num_timesteps)
-
-# Rescale from [-1, 1] to [0, 1]
-def denormalize(img):
-    return (img + 1) / 2
-
-generated_images = denormalize(generated_images)
-
-print("Generated Images Tensor Shape:", generated_images.shape)
-print("Min:", generated_images.min().item(), "Max:", generated_images.max().item())
-
-for i, img in enumerate(generated_images):
-    save_path = os.path.join(inference_dir, f"generated_image_{i+1}.png")
-    save_image(img, save_path)
-    print(f"Saved: {save_path}")
-
-print("Generation complete! Images saved in:", inference_dir)
+print("✅  Synthetic dataset complete!")

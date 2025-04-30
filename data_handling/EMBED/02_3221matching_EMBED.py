@@ -13,7 +13,7 @@ categories = {
     "benign": 4092,
     "probably_benign": 2728,
     "suspicious": 2728,
-    "malignant": None  # Copy all
+    "malignant": None  # Copy all, 1364
 }
 
 for category, target_count in categories.items():

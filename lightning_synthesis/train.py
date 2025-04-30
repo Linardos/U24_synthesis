@@ -14,7 +14,7 @@ import torch
 from monai import transforms as mt
 
 from data_loaders_l import NiftiSynthesisDataset
-from model_architectures import DDPM, UNet, MonaiDDPM, MonaiDDPM_unconditional
+from model_architectures import DDPM, UNet, MonaiDDPM
 
 torch.set_float32_matmul_precision('medium')
 # Load configuration
@@ -150,16 +150,10 @@ def find_latest_ckpt(exp_dir):
 resume_ckpt = find_latest_ckpt(experiment_path)
 if resume_ckpt:
     print(f"🔄  resuming from checkpoint: {resume_ckpt}")
-    if config["conditional"]:
-        model = MonaiDDPM.load_from_checkpoint(resume_ckpt)
-    else:
-        model = MonaiDDPM_unconditional.load_from_checkpoint(resume_ckpt)
+    model = MonaiDDPM.load_from_checkpoint(resume_ckpt)
 else:
     print("🆕  no checkpoint found – starting from scratch")
-    if config["conditional"]:
-        model = MonaiDDPM(lr=learning_rate, T=1000)
-    else:
-        model = MonaiDDPM_unconditional(lr=learning_rate, T=1000)
+    model = MonaiDDPM(lr=learning_rate, T=1000)
 
 # if config['conditional']:
 #     model = MonaiDDPM(lr=learning_rate, T=1000)
