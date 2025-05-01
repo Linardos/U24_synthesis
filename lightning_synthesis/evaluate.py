@@ -2,6 +2,8 @@
 #  evaluate.py  –  sample a fraction and score
 # ──────────────────────────────────────────────────────────────────────────────
 import os, torch, random
+import csv
+from datetime import datetime
 from tqdm import tqdm
 import torchmetrics
 from data_loaders_l import NiftiSynthesisDataset          # your dataset
@@ -22,6 +24,13 @@ NUM_STEPS   = 40        # fast sampler steps
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch.manual_seed(2025)
 random.seed(2025)
+
+log_dir = "./logs"
+os.makedirs(log_dir, exist_ok=True)
+
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+log_txt_path = os.path.join(log_dir, f"eval_log_{timestamp}.txt")
+log_csv_path = os.path.join(log_dir, f"eval_metrics_{timestamp}.csv")
 
 # ── LOAD MODEL (fp16) ─────────────────────────────────────────────────────────
 model = (MonaiDDPM
@@ -105,3 +114,23 @@ overall_psnr = sum(v for cls in class_stats.values() for v in cls["psnr"]) / \
 
 print(f"\nOVERALL         SSIM {overall_ssim:.4f} | PSNR {overall_psnr:.2f} dB")
 print("✅  done (no files written)")
+
+# ─ Text log (same as what’s printed) ──────────────────────────────────────────
+with open(log_txt_path, "w") as f:
+    f.write("─────  quick evaluation  ───────────────────────────\n")
+    for c in categories:
+        ssim_mean = sum(class_stats[c]["ssim"]) / len(class_stats[c]["ssim"])
+        psnr_mean = sum(class_stats[c]["psnr"]) / len(class_stats[c]["psnr"])
+        f.write(f"{c:16}  SSIM {ssim_mean:.4f} | PSNR {psnr_mean:.2f} dB\n")
+    f.write(f"\nOVERALL         SSIM {overall_ssim:.4f} | PSNR {overall_psnr:.2f} dB\n")
+    f.write("✅  done\n")
+
+# ─ CSV structured summary ─────────────────────────────────────────────────────
+with open(log_csv_path, mode="w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow(["Class", "SSIM_Mean", "PSNR_Mean"])
+    for c in categories:
+        ssim_mean = sum(class_stats[c]["ssim"]) / len(class_stats[c]["ssim"])
+        psnr_mean = sum(class_stats[c]["psnr"]) / len(class_stats[c]["psnr"])
+        writer.writerow([c, round(ssim_mean, 4), round(psnr_mean, 2)])
+    writer.writerow(["OVERALL", round(overall_ssim, 4), round(overall_psnr, 2)])
