@@ -61,20 +61,6 @@ class MonaiDDPM(pl.LightningModule):
 
         loss = F.mse_loss(noise_pred.float(), noise.float())
         self.log("train_loss", loss, prog_bar=True)
-        # ------------------------------------------------------------------
-        #  EXTRA QUALITY METRIC every self.log_every steps
-        # ------------------------------------------------------------------
-        if self.global_step % self.log_every == 0:
-            # a tiny, *single-step* reconstruction: x₀ ≈ x_t - σ_t ε̂
-            # (cheaper than full sampling but correlated with final quality)
-            alpha_t, sigma_t = self.scheduler.alphas_cumprod[timesteps], self.scheduler.sigmas[timesteps]
-            alpha_t = alpha_t.view(-1, 1, 1, 1)
-            sigma_t = sigma_t.view(-1, 1, 1, 1)
-            recon   = (images * torch.sqrt(alpha_t) - sigma_t * noise_pred) / torch.sqrt(alpha_t)
-            recon   = recon.clamp(-1, 1)
-
-            ssim_val = self.ssim(recon, images)   # averages over batch & channels
-            self.log("ssim", ssim_val, prog_bar=True, on_step=True, batch_size=images.size(0))
         return loss
 
     def configure_optimizers(self):

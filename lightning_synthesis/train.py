@@ -14,8 +14,9 @@ import torch
 from monai import transforms as mt
 
 from data_loaders_l import NiftiSynthesisDataset
-from model_architectures import DDPM, UNet, MonaiDDPM
+from model_architectures import UNet, MonaiDDPM
 
+# ── CONFIG ────────────────────────────────────────────────────────────────────
 torch.set_float32_matmul_precision('medium')
 # Load configuration
 with open('config_l.yaml', 'r') as f:
@@ -33,10 +34,8 @@ resize_dim = config.get('resize_dim', False) #set false for no resizing
 base_dir = Path("experiments")
 base_dir.mkdir(exist_ok=True)
 
-# ----------------------------------------------------------------------
-#  0. EXPERIMENT FOLDER -- reuse or create
-# ----------------------------------------------------------------------
 
+# ── EXPERIMENT FOLDER ──────────────────────────────────────────────────────────
 # Get existing experiment directories and find the highest prefix
 existing = [
     d for d in os.listdir(base_dir)
@@ -187,7 +186,7 @@ lr_monitor = LearningRateMonitor(logging_interval='epoch')
 
 # Set up Trainer
 trainer = pl.Trainer(
-    fast_dev_run=False,
+    fast_dev_run=config['fast_dev_run'],
     max_epochs=num_epochs,
     accelerator="auto",
     precision=16,
