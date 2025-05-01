@@ -56,15 +56,15 @@ real_ld  = torch.utils.data.DataLoader(real_ds, batch_size=BATCH,
                                        shuffle=True, num_workers=4,
                                        drop_last=True, persistent_workers=True)
 real_iter = iter(real_ld)
+# ── METRICS ───────────────────────────────────────────────────────────
+from torchmetrics.image.fid import FrechetInceptionDistance as FID
+from torchmetrics.image.kid import KernelInceptionDistance  as KID
 
-# ── METRICS ───────────────────────────────────────────────────────────────────
-ssim = torchmetrics.StructuralSimilarityIndexMeasure(data_range=1.).to(device)
-psnr = torchmetrics.PeakSignalNoiseRatio(data_range=1.).to(device)
+# Inception-V3 64-d feature layer → 1 GB VRAM instead of full 2048-d
+fid = FID(feature=64, normalize=True).to(device)
+kid = KID(subset_size=100, normalize=True).to(device)
 
-# track per-class results
-class_stats = {c: {"ssim": [], "psnr": []} for c in categories}
-
-# ── EVALUATION LOOP ───────────────────────────────────────────────────────────
+# ── EVALUATION LOOP (unchanged except metrics) ────────────────────────
 for cls_name, label_id in zip(categories, range(len(categories))):
     remaining = N_EVAL
     pbar = tqdm(total=N_EVAL, desc=f"Eval {cls_name:16}")
@@ -80,19 +80,21 @@ for cls_name, label_id in zip(categories, range(len(categories))):
                 guidance_scale=GUIDE_SCALE
             )
 
-        # get a random real batch (drop-in replacement each call)
+        # real batch (already [0,1] from transform)
         try:
             real, _ = next(real_iter)
         except StopIteration:
             real_iter = iter(real_ld)
             real, _ = next(real_iter)
 
-        real = real[:cur].to(device)              # match shape
-        ssim_val = ssim(synth.float(), real.float()).item()
-        psnr_val = psnr(synth.float(), real.float()).item()
+        real  = real[:cur].to(device)
+        synth = synth.to(device)
 
-        class_stats[cls_name]["ssim"].append(ssim_val)
-        class_stats[cls_name]["psnr"].append(psnr_val)
+        fid.update(real,  real=True)
+        fid.update(synth, real=False)
+
+        kid.update(real,  real=True)
+        kid.update(synth, real=False)
 
         remaining -= cur
         pbar.update(cur)
@@ -100,37 +102,25 @@ for cls_name, label_id in zip(categories, range(len(categories))):
     pbar.close()
     torch.cuda.empty_cache()
 
-# ── SUMMARY ───────────────────────────────────────────────────────────────────
-print("\n─────  quick evaluation  ───────────────────────────")
-for c in categories:
-    ssim_mean = sum(class_stats[c]["ssim"]) / len(class_stats[c]["ssim"])
-    psnr_mean = sum(class_stats[c]["psnr"]) / len(class_stats[c]["psnr"])
-    print(f"{c:16}  SSIM {ssim_mean:.4f} | PSNR {psnr_mean:.2f} dB")
+# ── SUMMARY ───────────────────────────────────────────────────────────
+fid_val = fid.compute().item()
+kid_mean, kid_std = kid.compute()          # returns mean ± std
+kid_val = kid_mean.item()
 
-overall_ssim = sum(v for cls in class_stats.values() for v in cls["ssim"]) / \
-               sum(len(cls["ssim"]) for cls in class_stats.values())
-overall_psnr = sum(v for cls in class_stats.values() for v in cls["psnr"]) / \
-               sum(len(cls["psnr"]) for cls in class_stats.values())
-
-print(f"\nOVERALL         SSIM {overall_ssim:.4f} | PSNR {overall_psnr:.2f} dB")
+print("\n─────  FID / KID evaluation  ───────────────────────")
+print(f"FID  : {fid_val:6.2f}")
+print(f"KID  : {kid_val*1000:6.2f} × 1e-3")   # common formatting
 print("✅  done (no files written)")
 
-# ─ Text log (same as what’s printed) ──────────────────────────────────────────
+# ─ Text log ───────────────────────────────────────────────────────────
 with open(log_txt_path, "w") as f:
-    f.write("─────  quick evaluation  ───────────────────────────\n")
-    for c in categories:
-        ssim_mean = sum(class_stats[c]["ssim"]) / len(class_stats[c]["ssim"])
-        psnr_mean = sum(class_stats[c]["psnr"]) / len(class_stats[c]["psnr"])
-        f.write(f"{c:16}  SSIM {ssim_mean:.4f} | PSNR {psnr_mean:.2f} dB\n")
-    f.write(f"\nOVERALL         SSIM {overall_ssim:.4f} | PSNR {overall_psnr:.2f} dB\n")
-    f.write("✅  done\n")
+    f.write("─────  FID / KID evaluation  ───────────────────────\n")
+    f.write(f"FID  : {fid_val:6.2f}\n")
+    f.write(f"KID  : {kid_val*1000:6.2f} × 1e-3\n")
 
-# ─ CSV structured summary ─────────────────────────────────────────────────────
+# ─ CSV log ────────────────────────────────────────────────────────────
 with open(log_csv_path, mode="w", newline="") as f:
     writer = csv.writer(f)
-    writer.writerow(["Class", "SSIM_Mean", "PSNR_Mean"])
-    for c in categories:
-        ssim_mean = sum(class_stats[c]["ssim"]) / len(class_stats[c]["ssim"])
-        psnr_mean = sum(class_stats[c]["psnr"]) / len(class_stats[c]["psnr"])
-        writer.writerow([c, round(ssim_mean, 4), round(psnr_mean, 2)])
-    writer.writerow(["OVERALL", round(overall_ssim, 4), round(overall_psnr, 2)])
+    writer.writerow(["Metric", "Value"])
+    writer.writerow(["FID",  round(fid_val, 2)])
+    writer.writerow(["KID(×1e-3)", round(kid_val*1000, 2)])
