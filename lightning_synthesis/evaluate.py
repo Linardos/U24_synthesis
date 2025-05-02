@@ -14,7 +14,8 @@ from monai.transforms import (
 )
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-CKPT_PATH   = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/049_cDDPM_depth5_fixedScaling_256x256/checkpoints/epoch=22-step=7843.ckpt"
+CKPT_PATH   = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/049_cDDPM_depth5_fixedScaling_256x256/checkpoints/epoch=22-step=7843.ckpt" # FID = 8.18
+
 GUIDE_SCALE = 3.0
 RESOLUTION  = 256
 BATCH       = 4         # GPU-friendly
@@ -62,9 +63,15 @@ from torchmetrics.image.kid import KernelInceptionDistance  as KID
 
 # Inception-V3 64-d feature layer → 1 GB VRAM instead of full 2048-d
 fid = FID(feature=64, normalize=True).to(device)
-kid = KID(subset_size=100, normalize=True).to(device)
 
 # ── EVALUATION LOOP (unchanged except metrics) ────────────────────────
+def to_rgb(x: torch.Tensor) -> torch.Tensor:
+    """
+    x : (B,1,H,W) in [0,1] → (B,3,H,W) by channel repetition.
+    No cost, keeps intensities identical across channels.
+    """
+    return x.repeat(1, 3, 1, 1)
+
 for cls_name, label_id in zip(categories, range(len(categories))):
     remaining = N_EVAL
     pbar = tqdm(total=N_EVAL, desc=f"Eval {cls_name:16}")
@@ -87,14 +94,12 @@ for cls_name, label_id in zip(categories, range(len(categories))):
             real_iter = iter(real_ld)
             real, _ = next(real_iter)
 
-        real  = real[:cur].to(device)
-        synth = synth.to(device)
+        real  = to_rgb(real[:cur].to(device))
+        synth = to_rgb(synth.to(device))
+
 
         fid.update(real,  real=True)
         fid.update(synth, real=False)
-
-        kid.update(real,  real=True)
-        kid.update(synth, real=False)
 
         remaining -= cur
         pbar.update(cur)
@@ -109,18 +114,15 @@ kid_val = kid_mean.item()
 
 print("\n─────  FID / KID evaluation  ───────────────────────")
 print(f"FID  : {fid_val:6.2f}")
-print(f"KID  : {kid_val*1000:6.2f} × 1e-3")   # common formatting
 print("✅  done (no files written)")
 
 # ─ Text log ───────────────────────────────────────────────────────────
 with open(log_txt_path, "w") as f:
     f.write("─────  FID / KID evaluation  ───────────────────────\n")
     f.write(f"FID  : {fid_val:6.2f}\n")
-    f.write(f"KID  : {kid_val*1000:6.2f} × 1e-3\n")
 
 # ─ CSV log ────────────────────────────────────────────────────────────
 with open(log_csv_path, mode="w", newline="") as f:
     writer = csv.writer(f)
     writer.writerow(["Metric", "Value"])
     writer.writerow(["FID",  round(fid_val, 2)])
-    writer.writerow(["KID(×1e-3)", round(kid_val*1000, 2)])
