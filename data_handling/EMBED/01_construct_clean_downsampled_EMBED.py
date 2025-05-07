@@ -117,6 +117,10 @@ def convert_dicom_to_nifti(dicom_path, output_path, target_size=(RESIZE_DIM, RES
 # ------------------------------------------------------------
 # 5.  Worker helpers
 # ------------------------------------------------------------
+from pydicom.tag import Tag         # new import at top of file
+
+IMPLANT_TAG = Tag(0x0028, 0x1300)   # Breast Implant Present (CS)
+
 def _process_one(row, split):
     src = os.path.join(
         base_dir,
@@ -127,6 +131,19 @@ def _process_one(row, split):
     if not os.path.isfile(src):
         print(f"Missing file: {src}")
         return
+
+    # ── quick header check ──────────────────────────────
+    try:
+        hdr = dcmread(src, stop_before_pixels=True)
+        implant_flag = str(hdr.get(IMPLANT_TAG, "")).upper()
+        if implant_flag == "YES":
+            print(f"Skip implant   : {src}")
+            return               # drop the file
+    except Exception as e:
+        # If the header can’t be read, fall through and let the pixel read fail later
+        print(f"Header read err : {src} → {e}")
+
+    # ── normal processing ───────────────────────────────────
 
     dst_folder = os.path.join(output_dir, split, cat, os.path.splitext(os.path.basename(src))[0])
     os.makedirs(dst_folder, exist_ok=True)

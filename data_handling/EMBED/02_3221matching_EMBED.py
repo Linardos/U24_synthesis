@@ -3,6 +3,7 @@ import random
 import shutil
 from tqdm import tqdm
 
+# Because we filtered out implants and other artifacts, another round of matching is warranted.
 
 def matching_3221(source_base_dir, target_base_dir, malignant_num):
     categories = {
