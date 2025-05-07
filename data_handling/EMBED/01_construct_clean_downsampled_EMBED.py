@@ -12,6 +12,7 @@ from nibabel import Nifti1Image
 from sklearn.model_selection import train_test_split
 from scipy.ndimage import zoom
 
+RESIZE_DIM = 256
 # ------------------------------------------------------------
 # 0.  Load metadata  ▸ map BI-RADS codes → four categories
 # ------------------------------------------------------------
@@ -26,28 +27,45 @@ birads_map = {
     "M": "suspicious",
     "K": "malignant",
 }
+
+# map BI-RADS → coarse category labels
 data["category"] = data["asses"].map(birads_map).fillna("unknown")
 
+# 🔸 ignore records whose category is still unknown
+data = data[data["category"] != "unknown"]
+
+# 🔹 ignore magnification views
+data = data[data["spot_mag"] != 1]
+
 # ------------------------------------------------------------
-# 1.  Cap dataset size per category *before* train/test split
+# 1.  Cap dataset size per category – 3 : 2 : 2 : 1 matching
 # ------------------------------------------------------------
+# ➊  Count malignants after filtering
+malignant_count = len(data[data["category"] == "malignant"])
+if malignant_count == 0:
+    raise ValueError("No malignant cases left after filtering!")
+
+# ➋  Build the desired‑count dictionary on the fly
 desired_counts = {
-    "benign":            16_000,
-    "probably_benign":    8_000,
-    "suspicious":         6_000,
-    "malignant":          None,   # keep everything
+    "benign":            3 * malignant_count,
+    "probably_benign":   2 * malignant_count,
+    "suspicious":        2 * malignant_count,
+    "malignant":         None,              # always keep all malignants
 }
 
+print("Target sample sizes per class:")
+for k, v in desired_counts.items():
+    print(f"  {k:<17} : {v if v is not None else 'ALL'}")
+
+# ➌  Function to trim each group to its cap
 def _cap(g):
-    limit = desired_counts.get(g.name, None)
-    if limit is None or len(g) <= limit:
+    limit = desired_counts[g.name]          # every key exists by construction
+    if limit is None or len(g) <= limit:    # keep all if limit is None
         return g
     return g.sample(n=limit, random_state=42)
 
-data = (
-    data.groupby("category", group_keys=False)
-        .apply(_cap)
-)
+# ➍  Apply the cap
+data = data.groupby("category", group_keys=False).apply(_cap)
 
 # ------------------------------------------------------------
 # 2.  Stratified 80/20 split on the *trimmed* dataframe
@@ -59,11 +77,19 @@ train, test = train_test_split(
     stratify=data["category"],
 )
 
+# Quick sanity check – prints counts to prove the 80 / 20 split
+def _show_split(name, df):
+    print(f"\n{name} counts:")
+    print(df["category"].value_counts().to_string())
+_show_split("TRAIN", train)
+_show_split("TEST",  test)
+
+
 # ------------------------------------------------------------
 # 3.  Folder layout
 # ------------------------------------------------------------
 base_dir   = "/mnt/d/Datasets/EMBED/images/"
-output_dir = "/mnt/d/Datasets/EMBED/EMBED_clean_512x512"
+output_dir = f"/mnt/d/Datasets/EMBED/EMBED_clean_{RESIZE_DIM}x{RESIZE_DIM}"
 categories = list(desired_counts.keys())
 
 for split in ["train", "test"]:
@@ -72,9 +98,9 @@ for split in ["train", "test"]:
     print(f"{split.capitalize()} directories created!")
 
 # ------------------------------------------------------------
-# 4.  DICOM → 512×512 NIfTI conversion
+# 4.  DICOM → 256×256 NIfTI conversion
 # ------------------------------------------------------------
-def convert_dicom_to_nifti(dicom_path, output_path, target_size=(512, 512)):
+def convert_dicom_to_nifti(dicom_path, output_path, target_size=(RESIZE_DIM, RESIZE_DIM)):
     try:
         ds = dcmread(dicom_path)
         img = ds.pixel_array

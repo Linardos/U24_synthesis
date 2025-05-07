@@ -8,12 +8,12 @@ source_base_dir = "/mnt/d/Datasets/EMBED/EMBED_clean_512x512/train/original"
 target_base_dir = "/mnt/d/Datasets/EMBED/EMBED_clean_512x512/train_3221/original"
 
 # Categories and the number of samples to copy
-# 3:2:2:1 matching, with malignant fixed at 1364
+# 3:2:2:1 matching, with malignant fixed at 1144 once we removed artifacts
 categories = {
-    "benign": 4092,
-    "probably_benign": 2728,
-    "suspicious": 2728,
-    "malignant": None  # Copy all, 1364
+    "benign":          3432,  # 3:2:2:1 ratio
+    "probably_benign": 2288,
+    "suspicious":      2288,
+    "malignant":       None  # Copy all, 1144
 }
 
 for category, target_count in categories.items():

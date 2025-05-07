@@ -1,29 +1,28 @@
 # ──────────────────────────────────────────────────────────────────────────────
-#  evaluate.py  –  sample a fraction and score
+#  evaluate.py  –  sample a fraction and score over different guidance scales
 # ──────────────────────────────────────────────────────────────────────────────
-import os, torch, random
-import csv
+import os, torch, random, csv
 from datetime import datetime
 from tqdm import tqdm
-import torchmetrics
-from data_loaders_l import NiftiSynthesisDataset          # your dataset
-from model_architectures import MonaiDDPM                 # your model
+from data_loaders_l import NiftiSynthesisDataset
+from model_architectures import MonaiDDPM
 from monai.transforms import (
     LoadImaged, SqueezeDimd, EnsureChannelFirstd,
     Resized, ScaleIntensityd, ToTensord, Compose
 )
+from torchmetrics.image import FrechetInceptionDistance as FID
+
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-CKPT_PATH   = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/049_cDDPM_depth5_fixedScaling_256x256/checkpoints/epoch=22-step=7843.ckpt" # FID = 8.18
-
-GUIDE_SCALE = 3.0
-RESOLUTION  = 256
-BATCH       = 4         # GPU-friendly
-N_EVAL      = 128       # how many synthetic images PER class to score
-NUM_STEPS   = 40        # fast sampler steps
+CKPT_PATH   = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/049_cDDPM_depth5_fixedScaling_256x256/checkpoints/epoch=22-step=7843.ckpt" # FID = 8.18 at guidance scale 3
+RESOLUTION = 256
+BATCH      = 4
+N_EVAL     = 128            # per class, per scale
+NUM_STEPS  = 40
+SCALES     = range(0, 6)    # 0,1,2,3,4,5
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
-torch.manual_seed(2025)
+torch.manual_seed(2025); random.seed(2025)
 random.seed(2025)
 
 log_dir = "./logs"
@@ -40,7 +39,6 @@ model = (MonaiDDPM
 
 # ── REAL IMAGE LOADER (scaled to [0,1]) ───────────────────────────────────────
 root_dir   = "/mnt/d/Datasets/EMBED/EMBED_clean_512x512/train_3221/original"
-split      = "train"
 categories = ["benign","probably_benign","suspicious","malignant"]
 
 real_tf = Compose([
@@ -56,73 +54,47 @@ real_ds  = NiftiSynthesisDataset(root_dir, transform=real_tf)
 real_ld  = torch.utils.data.DataLoader(real_ds, batch_size=BATCH,
                                        shuffle=True, num_workers=4,
                                        drop_last=True, persistent_workers=True)
-real_iter = iter(real_ld)
-# ── METRICS ───────────────────────────────────────────────────────────
-from torchmetrics.image.fid import FrechetInceptionDistance as FID
-from torchmetrics.image.kid import KernelInceptionDistance  as KID
 
-# Inception-V3 64-d feature layer → 1 GB VRAM instead of full 2048-d
-fid = FID(feature=64, normalize=True).to(device)
+def to_rgb(x): return x.repeat(1,3,1,1)
 
-# ── EVALUATION LOOP (unchanged except metrics) ────────────────────────
-def to_rgb(x: torch.Tensor) -> torch.Tensor:
-    """
-    x : (B,1,H,W) in [0,1] → (B,3,H,W) by channel repetition.
-    No cost, keeps intensities identical across channels.
-    """
-    return x.repeat(1, 3, 1, 1)
+def accumulate_real_features(fid_metric):
+    for _ in range((N_EVAL * len(categories)) // BATCH + 1):
+        real, _ = next(iter(real_ld))
+        fid_metric.update(to_rgb(real.to(device)), real=True)
 
-for cls_name, label_id in zip(categories, range(len(categories))):
-    remaining = N_EVAL
-    pbar = tqdm(total=N_EVAL, desc=f"Eval {cls_name:16}")
+# ── EVALUATION FUNCTION ──────────────────────────────────────────────
+def fid_for_scale(scale: int) -> float:
+    fid = FID(feature=64, normalize=True).to(device)
+    accumulate_real_features(fid)
 
-    while remaining > 0:
-        cur = min(BATCH, remaining)
+    for cls_name, label_id in zip(categories, range(len(categories))):
+        remaining = N_EVAL
+        pbar = tqdm(total=N_EVAL, desc=f"GS={scale}  {cls_name:16}", leave=False)
+        while remaining > 0:
+            cur = min(BATCH, remaining)
+            with torch.no_grad(), torch.autocast("cuda", torch.float16):
+                synth = model.sample(label=label_id, N=cur, size=RESOLUTION,
+                                     guidance_scale=scale,
+                                     )
+            fid.update(to_rgb(synth.to(device)), real=False)
+            remaining -= cur; pbar.update(cur)
+        pbar.close(); torch.cuda.empty_cache()
+    return fid.compute().item()
 
-        with torch.no_grad(), torch.autocast("cuda", torch.float16):
-            synth = model.sample(
-                label=label_id,
-                N=cur,
-                size=RESOLUTION,
-                guidance_scale=GUIDE_SCALE
-            )
+# ── SWEEP ────────────────────────────────────────────────────────────
+results = {}
+for gs in SCALES:
+    print(f"\n>>> evaluating guidance scale {gs}")
+    results[gs] = fid_for_scale(gs)
+    print(f"FID @ GS {gs}: {results[gs]:.2f}")
 
-        # real batch (already [0,1] from transform)
-        try:
-            real, _ = next(real_iter)
-        except StopIteration:
-            real_iter = iter(real_ld)
-            real, _ = next(real_iter)
+# ── LOGGING ──────────────────────────────────────────────────────────
+ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+os.makedirs("logs", exist_ok=True)
+with open(f"logs/fid_vs_guidance_{ts}.csv", "w", newline="") as f:
+    csv.writer(f).writerows([["GuidanceScale","FID"]] +
+                            [[k, round(v,2)] for k,v in results.items()])
 
-        real  = to_rgb(real[:cur].to(device))
-        synth = to_rgb(synth.to(device))
-
-
-        fid.update(real,  real=True)
-        fid.update(synth, real=False)
-
-        remaining -= cur
-        pbar.update(cur)
-
-    pbar.close()
-    torch.cuda.empty_cache()
-
-# ── SUMMARY ───────────────────────────────────────────────────────────
-fid_val = fid.compute().item()
-kid_mean, kid_std = kid.compute()          # returns mean ± std
-kid_val = kid_mean.item()
-
-print("\n─────  FID / KID evaluation  ───────────────────────")
-print(f"FID  : {fid_val:6.2f}")
-print("✅  done (no files written)")
-
-# ─ Text log ───────────────────────────────────────────────────────────
-with open(log_txt_path, "w") as f:
-    f.write("─────  FID / KID evaluation  ───────────────────────\n")
-    f.write(f"FID  : {fid_val:6.2f}\n")
-
-# ─ CSV log ────────────────────────────────────────────────────────────
-with open(log_csv_path, mode="w", newline="") as f:
-    writer = csv.writer(f)
-    writer.writerow(["Metric", "Value"])
-    writer.writerow(["FID",  round(fid_val, 2)])
+print("\n──── FID vs. guidance scale ────")
+for k,v in results.items():
+    print(f"GS {k:>2}:  FID {v:6.2f}")
