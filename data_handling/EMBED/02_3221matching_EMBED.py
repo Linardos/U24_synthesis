@@ -1,60 +1,70 @@
-import os
-import random
-import shutil
+#!/usr/bin/env python3
+import os, random, shutil
 from tqdm import tqdm
 
-# Because we filtered out implants and other artifacts, another round of matching is warranted.
+def downsample_3221_inplace(source_base_dir, malignant_num, *, dry_run=False, seed=42):
+    """
+    Trim BENIGN / PROBABLY_BENIGN / SUSPICIOUS folders in `source_base_dir`
+    so their counts match the 3 : 2 : 2 : 1 ratio w.r.t. `malignant_num`.
 
-def matching_3221(source_base_dir, target_base_dir, malignant_num):
-    categories = {
-        "benign":          3 * malignant_num,  # 3:2:2:1 ratio
+    Parameters
+    ----------
+    source_base_dir : str
+        Path that contains the four category sub-folders.
+        (e.g. ".../train/original" or ".../test")
+    malignant_num   : int
+        Number of malignant cases already present in that split.
+    dry_run         : bool, optional
+        If True, only print what would be removed; don't delete anything.
+    seed            : int, optional
+        RNG seed for reproducibility.
+    """
+    random.seed(seed)
+
+    targets = {
+        "benign":          3 * malignant_num,
         "probably_benign": 2 * malignant_num,
         "suspicious":      2 * malignant_num,
-        "malignant":       None  # Copy all
+        "malignant":       None,                  # keep all
     }
-    for category, target_count in categories.items():
-        source_dir = os.path.join(source_base_dir, category)
-        target_dir = os.path.join(target_base_dir, category)
 
-        # Ensure the target directory exists
-        os.makedirs(target_dir, exist_ok=True)
+    for cat, cap in targets.items():
+        cat_dir = os.path.join(source_base_dir, cat)
+        if not os.path.isdir(cat_dir):
+            print(f"⚠️  Skipping '{cat_dir}' (not found)")
+            continue
 
-        # Get list of all subdirectories (assuming each case is in its own folder)
-        folders = [f for f in os.listdir(source_dir) if os.path.isdir(os.path.join(source_dir, f))]
-        current_count = len(folders)
+        folders = [f for f in os.listdir(cat_dir)
+                   if os.path.isdir(os.path.join(cat_dir, f))]
+        n_now = len(folders)
 
-        print(f"\nCategory: {category} | Available: {current_count} | Target: {target_count if target_count else 'All'}")
+        if cap is None or n_now <= cap:
+            print(f"[{cat:<16}] keep {n_now:>5} / {n_now:>5}")
+            continue
 
-        # Determine how many folders to copy
-        if target_count is None or current_count <= target_count:
-            folders_to_copy = folders  # Copy all if target_count is None or not enough samples
-        else:
-            folders_to_copy = random.sample(folders, target_count)
+        n_remove = n_now - cap
+        to_remove = random.sample(folders, n_remove)
 
-        print(f"Copying {len(folders_to_copy)} folders to '{target_dir}'...")
+        print(f"[{cat:<16}] current {n_now:>5} remove {n_remove:>5} → target {cap:>5}")
 
-        # Copy selected folders with tqdm progress bar
-        for folder in tqdm(folders_to_copy, desc=f"Copying {category}", unit="folder"):
-            src_path = os.path.join(source_dir, folder)
-            dest_path = os.path.join(target_dir, folder)
-            shutil.copytree(src_path, dest_path)
+        for folder in tqdm(to_remove, desc=f"Deleting {cat}", unit="folder"):
+            path = os.path.join(cat_dir, folder)
+            if dry_run:
+                tqdm.write(f"DRY-RUN  would remove {path}")
+            else:
+                shutil.rmtree(path, ignore_errors=True)
 
-        print(f"Finished copying {len(folders_to_copy)} cases to '{target_dir}'.\n")
+    print("✅ Down-sampling complete.")
 
+# ------------------------------------------------------------------
+# Example usage
+# ------------------------------------------------------------------
+EMBED_ds = "EMBED_clean_256x256"
 
+# TRAIN split
+train_dir = f"/mnt/d/Datasets/EMBED/{EMBED_ds}/train/original"
+downsample_3221_inplace(train_dir, malignant_num=1148, dry_run=False)
 
-# Define source and target directories
-EMBED_downsampled = "EMBED_clean_256x256"
-
-source_base_dir = f"/mnt/d/Datasets/EMBED/{EMBED_downsampled}/train/original"
-target_base_dir = f"/mnt/d/Datasets/EMBED/{EMBED_downsampled}/train_3221/original"
-malignant_num = 1148 # for train
-
-matching_3221(source_base_dir, target_base_dir, malignant_num)
-
-source_base_dir = f"/mnt/d/Datasets/EMBED/{EMBED_downsampled}/test"
-target_base_dir = f"/mnt/d/Datasets/EMBED/{EMBED_downsampled}/test_3221"
-malignant_num = 324
-
-print("All requested categories have been processed successfully. ✅")
-
+# TEST split
+test_dir  = f"/mnt/d/Datasets/EMBED/{EMBED_ds}/test"
+downsample_3221_inplace(test_dir,  malignant_num=324,  dry_run=False)
