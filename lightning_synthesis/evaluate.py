@@ -14,7 +14,9 @@ from torchmetrics.image import FrechetInceptionDistance as FID
 
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-CKPT_PATH   = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/049_cDDPM_depth5_fixedScaling_256x256/checkpoints/epoch=22-step=7843.ckpt" # FID = 8.18 at guidance scale 3
+# CKPT_PATH  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/049_cDDPM_depth5_fixedScaling_256x256/checkpoints/epoch=22-step=7843.ckpt" # FID = 8.18 at guidance scale 3
+CKPT_PATH  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/053_DDPM__DataArtifactsRemoved___256x256/checkpoints/epoch=04-step=1435.ckpt"
+CKPT_PATH  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/054_DDPM_default512_256x256/checkpoints/epoch=04-step=1435.ckpt"
 RESOLUTION = 256
 BATCH      = 4
 N_EVAL     = 128            # per class, per scale
@@ -28,7 +30,7 @@ random.seed(2025)
 log_dir = "./logs"
 os.makedirs(log_dir, exist_ok=True)
 
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+timestamp    = datetime.now().strftime("%Y%m%d_%H%M%S")
 log_txt_path = os.path.join(log_dir, f"eval_log_{timestamp}.txt")
 log_csv_path = os.path.join(log_dir, f"eval_metrics_{timestamp}.csv")
 
@@ -38,7 +40,8 @@ model = (MonaiDDPM
          .half().to(device).eval())
 
 # ── REAL IMAGE LOADER (scaled to [0,1]) ───────────────────────────────────────
-root_dir   = "/mnt/d/Datasets/EMBED/EMBED_clean_512x512/train_3221/original"
+# root_dir   = "/mnt/d/Datasets/EMBED/EMBED_clean_512x512/train_3221/original"
+root_dir   = '/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train/original'
 categories = ["benign","probably_benign","suspicious","malignant"]
 
 real_tf = Compose([

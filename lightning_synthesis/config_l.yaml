@@ -1,6 +1,5 @@
 # Dataset Paths
-# root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean/train_downsampled'
-root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_512x512/train_3221'  # Update based on your dataset
+root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_512x512/train'  # Update based on your dataset
 data_dir: 'original'
 
 # Synthesis-Specific Parameters
@@ -14,9 +13,9 @@ learning_rate: 0.00001
 num_epochs: 100  
 
 # Experiment Tracking
-experiment_name: 'cDDPM_depth5_testSSIM'
+experiment_name: 'DDPM_default512'
 # experiment_name: '044_DDPM_deeper_128x128' # use suffix and full existing name to continue from checkpoint
 
 # Sanity checks
-fast_dev_run: True
+fast_dev_run: False
 

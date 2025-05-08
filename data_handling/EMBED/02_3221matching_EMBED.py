@@ -59,7 +59,8 @@ def downsample_3221_inplace(source_base_dir, malignant_num, *, dry_run=False, se
 # ------------------------------------------------------------------
 # Example usage
 # ------------------------------------------------------------------
-EMBED_ds = "EMBED_clean_256x256"
+RESIZE_DIM = 512
+EMBED_ds = f"EMBED_clean_{RESIZE_DIM}x{RESIZE_DIM}"
 
 # TRAIN split
 train_dir = f"/mnt/d/Datasets/EMBED/{EMBED_ds}/train/original"

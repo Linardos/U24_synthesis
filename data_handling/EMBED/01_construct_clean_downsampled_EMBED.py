@@ -12,7 +12,7 @@ from nibabel import Nifti1Image
 from sklearn.model_selection import train_test_split
 from scipy.ndimage import zoom
 
-RESIZE_DIM = 256
+RESIZE_DIM = 512
 # ------------------------------------------------------------
 # 0.  Load metadata  ▸ map BI-RADS codes → four categories
 # ------------------------------------------------------------
