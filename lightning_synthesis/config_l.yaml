@@ -10,10 +10,10 @@ resize_dim: 256 # Resize data
 # Training Hyperparameters
 batch_size: 8  # Increased for more stable gradients
 learning_rate: 0.00001
-num_epochs: 100  
+num_epochs: 30  
 
 # Experiment Tracking
-experiment_name: 'DDPM_default512'
+experiment_name: 'DDPM_contrast-aug-20percent-lrscheduler'
 # experiment_name: '044_DDPM_deeper_128x128' # use suffix and full existing name to continue from checkpoint
 
 # Sanity checks

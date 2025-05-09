@@ -111,9 +111,26 @@ train_transforms = mt.Compose(
         mt.LoadImaged(keys=["image"], image_only=True),
         mt.SqueezeDimd(keys=["image"], dim=-1), # (H,W,1) → (H,W)
         mt.EnsureChannelFirstd(keys=["image"]), # (1,H,W)
-        mt.Resized(keys=["image"], spatial_size=[resize_dim, resize_dim], mode="bilinear"),
+
+
+        # Crop relevant area
+        mt.CropForegroundd(keys=["image"], source_key="image"),
+        mt.Resized(keys=["image"], spatial_size=(resize_dim, resize_dim),
+                   mode="bilinear", align_corners=False),
+
+        # local-contrast aug now hits only 20 % of the images
+        mt.RandAdjustContrastd(keys=["image"],
+                               prob=0.20, gamma=(0.9, 1.1)),
+        mt.RandHistogramShiftd(keys=["image"],
+                               prob=0.20, num_control_points=6),
+
+        # normalize
+        mt.Lambdad(keys=["image"],
+                   func=lambda img: (img - img.mean()) / (img.std() + 1e-8)),
         mt.ScaleIntensityd(keys=["image"], minv=-1.0, maxv=1.0), # scale to [-1,1]. Diffusion Models do better if centered on a 0 mean
         mt.ToTensord(keys=["image"]),
+
+        # conditionality stuff, applied to labels
         mt.RandLambdad(keys=["class"], prob=0.15, func=lambda x: -1 * torch.ones_like(x)),
         mt.Lambdad(
             keys=["class"],
