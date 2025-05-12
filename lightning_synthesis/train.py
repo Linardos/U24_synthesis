@@ -27,7 +27,6 @@ pl.seed_everything(config.get('seed', 42), workers=True)
 batch_size = config['batch_size']
 learning_rate = config['learning_rate']
 num_epochs = config['num_epochs']
-label_dim = config.get('label_dim', 4)
 resize_dim = config.get('resize_dim', False) #set false for no resizing
 # Prepare output directories
 # Base directory for all experiments

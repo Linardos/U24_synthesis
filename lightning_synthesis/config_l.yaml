@@ -3,7 +3,7 @@ root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_512x512/train'  # Update based on y
 data_dir: 'original'
 
 # Synthesis-Specific Parameters
-label_dim: 4 #4  # Number of unique labels for conditional synthesis, set to 10 for mnist, 4 for embed
+drop_birads_3: True # probably benign is tough to classify
 data_mode: 'embed' # embed
 resize_dim: 256 # Resize data
 

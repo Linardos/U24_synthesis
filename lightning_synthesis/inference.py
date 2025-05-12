@@ -1,17 +1,19 @@
 import os, uuid, numpy as np, torch, nibabel as nib
 from tqdm import tqdm
 from model_architectures import MonaiDDPM
-device = "cuda:0" if torch.cuda.is_available() else "cpu"
+device = "cuda:0" #if torch.cuda.is_available() else "cpu"
 
 torch.manual_seed(2025)   # reproducible noise
 
 CONDITIONAL = True
 RESOLUTION = 256
-BATCH = 2       # keep RAM/VRAM sane; adjust to your GPU
-GUIDE_SCALE = 2.0
+BATCH = 1       # keep RAM/VRAM sane; adjust to your GPU
+GUIDE_SCALE = 5.0
 T = 1_000     
 
-ckpt_path = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/049_cDDPM_depth5_fixedScaling_256x256/checkpoints/epoch=22-step=7843.ckpt"
+# ckpt_path = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/049_cDDPM_depth5_fixedScaling_256x256/checkpoints/epoch=22-step=7843.ckpt"
+ckpt_path = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/054_DDPM_default512_256x256/checkpoints/epoch=04-step=1435.ckpt"
+ckpt_path = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/063_DDPM_contrast-aug-20percent_256x256/checkpoints/epoch=04-step=1435.ckpt"
 
 model = (MonaiDDPM
          .load_from_checkpoint(ckpt_path, map_location="cpu")   # keep GPU free
@@ -21,8 +23,14 @@ model = (MonaiDDPM
 
 # --- where to put the synthetic data ---------------------------------
 # ---------------------------------------------------------------------
-SYN_ROOT = f"/mnt/d/Datasets/EMBED/EMBED_clean_512x512/train_3221/synthetic_guide{GUIDE_SCALE}"
+if "contrast" in ckpt_path:
+    SYN_ROOT = f"/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train/synthetic_guide{GUIDE_SCALE}_contrast-enhanced"
+else:
+    SYN_ROOT = f"/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train/synthetic_guide{GUIDE_SCALE}"
+
 os.makedirs(SYN_ROOT, exist_ok=True)
+
+print(f"Running inference for {SYN_ROOT}")
 # --- how many of each label do we want? ------------------------------
 target_counts = {
     'benign':          4092,

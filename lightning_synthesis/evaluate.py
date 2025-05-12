@@ -49,10 +49,24 @@ categories = ["benign","probably_benign","suspicious","malignant"]
 real_tf = Compose([
     LoadImaged(keys=["image"], image_only=True),
     SqueezeDimd(keys=["image"], dim=-1),
-    EnsureChannelFirstd(keys=["image"]),
-    Resized(keys=["image"], spatial_size=(RESOLUTION, RESOLUTION)),
-    ScaleIntensityd(keys=["image"], minv=0.0, maxv=1.0),
-    ToTensord(keys=["image"]),
+    EnsureChannelFirstd(keys=["image"]),     
+    # Crop relevant area
+    mt.CropForegroundd(keys=["image"], source_key="image"),
+    mt.Resized(keys=["image"], spatial_size=(resize_dim, resize_dim),
+                mode="bilinear", align_corners=False),
+
+    # local-contrast aug now hits only 20 % of the images
+    # mt.RandAdjustContrastd(keys=["image"],
+    #                        prob=0.20, gamma=(0.9, 1.1)),
+    # mt.RandHistogramShiftd(keys=["image"],
+    #                        prob=0.20, num_control_points=6),
+
+    # normalize
+    mt.Lambdad(keys=["image"],
+                func=lambda img: (img - img.mean()) / (img.std() + 1e-8)),
+    mt.ScaleIntensityd(keys=["image"], minv=0.0, maxv=1.0),
+    mt.ToTensord(keys=["image"]),
+
 ])
 
 real_ds  = NiftiSynthesisDataset(root_dir, transform=real_tf)

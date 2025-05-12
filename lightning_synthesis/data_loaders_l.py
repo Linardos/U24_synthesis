@@ -31,6 +31,7 @@ class NiftiSynthesisDataset(Dataset):
         self.samples = self._load_samples()
 
     def _load_samples(self):
+
         samples_by_label = {
             'benign': [],
             'malignant': [],
