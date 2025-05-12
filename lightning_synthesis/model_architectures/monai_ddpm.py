@@ -68,12 +68,16 @@ class MonaiDDPM(pl.LightningModule):
 
     # ---------- sampling helpers ----------------------------------------
     @torch.no_grad()
-    def sample(self, label=0, N=16, size=64, guidance_scale=4.0):
-        """
-        Class-conditional sampling with classifier-free guidance, MONAI-style batch concat.
-        """
+    def sample(self, label=0, N=16, size=64, guidance_scale=4.0, num_inference_steps=25, fp16=True):
+        if fp16:
+            autocast_ctx = torch.autocast("cuda", dtype=torch.float16)
+        else:
+            from contextlib import nullcontext
+            autocast_ctx = nullcontext()
+
         device = self.device
-        noise  = torch.randn(N, 1, size, size, device=device)
+        noise = torch.randn(N, 1, size, size, device=device, dtype=torch.float16 if fp16 else torch.float32)
+
 
         # timesteps
         self.scheduler.set_timesteps(self.hparams.T)
