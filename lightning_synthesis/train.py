@@ -118,10 +118,10 @@ train_transforms = mt.Compose(
                    mode="bilinear", align_corners=False),
 
         # local-contrast aug now hits only 20 % of the images
-        mt.RandAdjustContrastd(keys=["image"],
-                               prob=0.20, gamma=(0.9, 1.1)),
-        mt.RandHistogramShiftd(keys=["image"],
-                               prob=0.20, num_control_points=6),
+        # mt.RandAdjustContrastd(keys=["image"],
+        #                        prob=0.20, gamma=(0.9, 1.1)),
+        # mt.RandHistogramShiftd(keys=["image"],
+        #                        prob=0.20, num_control_points=6),
 
         # normalize
         mt.Lambdad(keys=["image"],

@@ -6,24 +6,24 @@ from datetime import datetime
 from tqdm import tqdm
 from data_loaders_l import NiftiSynthesisDataset
 from model_architectures import MonaiDDPM
-from monai.transforms import (
-    LoadImaged, SqueezeDimd, EnsureChannelFirstd,
-    Resized, ScaleIntensityd, ToTensord, Compose
-)
+from monai import transforms as mt
 from torchmetrics.image import FrechetInceptionDistance as FID
 
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 # CKPT_PATH  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/049_cDDPM_depth5_fixedScaling_256x256/checkpoints/epoch=22-step=7843.ckpt" # FID = 8.18 at guidance scale 3
 CKPT_PATH  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/053_DDPM__DataArtifactsRemoved___256x256/checkpoints/epoch=04-step=1435.ckpt"
-CKPT_PATH  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/054_DDPM_default512_256x256/checkpoints/epoch=04-step=1435.ckpt"
+CKPT_PATH  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/054_DDPM_default512_256x256/checkpoints/epoch=04-step=1435.ckpt" # FID @ GS 0: 7.38
+CKPT_PATH  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/057_DDPM_seed2025_cropped_256x256/checkpoints/epoch=04-step=1435.ckpt"
 CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/063_DDPM_contrast-aug-20percent_256x256/checkpoints/epoch=04-step=1435.ckpt"
 
+print(f"Evaluating {CKPT_PATH}")
+NAME_TAG = "002_Contrast"
 RESOLUTION = 256
-BATCH      = 4
-N_EVAL     = 128            # per class, per scale
+BATCH      = 8
+N_EVAL     = 128            # samples to evaluate per class, per scale
 NUM_STEPS  = 40
-SCALES     = range(0, 6)    # 0,1,2,3,4,5
+SCALES     = range(0, 6)    # guidance scales to evaluate
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch.manual_seed(2025); random.seed(2025)
@@ -46,13 +46,13 @@ model = (MonaiDDPM
 root_dir   = '/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train/original'
 categories = ["benign","probably_benign","suspicious","malignant"]
 
-real_tf = Compose([
-    LoadImaged(keys=["image"], image_only=True),
-    SqueezeDimd(keys=["image"], dim=-1),
-    EnsureChannelFirstd(keys=["image"]),     
+real_tf = mt.Compose([
+    mt.LoadImaged(keys=["image"], image_only=True),
+    mt.SqueezeDimd(keys=["image"], dim=-1),
+    mt.EnsureChannelFirstd(keys=["image"]),     
     # Crop relevant area
     mt.CropForegroundd(keys=["image"], source_key="image"),
-    mt.Resized(keys=["image"], spatial_size=(resize_dim, resize_dim),
+    mt.Resized(keys=["image"], spatial_size=(RESOLUTION, RESOLUTION),
                 mode="bilinear", align_corners=False),
 
     # local-contrast aug now hits only 20 % of the images
@@ -110,10 +110,10 @@ for gs in SCALES:
 # ── LOGGING ──────────────────────────────────────────────────────────
 ts = datetime.now().strftime("%Y%m%d_%H%M%S")
 os.makedirs("logs", exist_ok=True)
-with open(f"logs/fid_vs_guidance_{ts}.csv", "w", newline="") as f:
+with open(f"logs/{NAME_TAG}_fid_vs_guidance_{ts}.csv", "w", newline="") as f:
     csv.writer(f).writerows([["GuidanceScale","FID"]] +
                             [[k, round(v,2)] for k,v in results.items()])
 
-print("\n──── FID vs. guidance scale ────")
+print(f"\n──── {NAME_TAG}: FID vs. guidance scale ────")
 for k,v in results.items():
     print(f"GS {k:>2}:  FID {v:6.2f}")

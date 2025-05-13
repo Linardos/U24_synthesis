@@ -1,7 +1,7 @@
 import monai
 from generative.inferers import DiffusionInferer
 from generative.networks.nets import DiffusionModelUNet
-from generative.networks.schedulers import DDPMScheduler
+from generative.networks.schedulers import DDPMScheduler, PNDMScheduler   
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
@@ -9,7 +9,7 @@ from tqdm import tqdm
 import torchmetrics
 
 class MonaiDDPM(pl.LightningModule):
-    def __init__(self, lr, T=1000, log_every=500):
+    def __init__(self, lr, T=1000, log_every=500, which_scheduler="PNDM"):
         super().__init__()
         # --- noise‑predictor -------------------------------------------------
         self.unet = DiffusionModelUNet(
@@ -27,6 +27,7 @@ class MonaiDDPM(pl.LightningModule):
 
         # --- diffusion utilities --------------------------------------------
         self.scheduler = DDPMScheduler(num_train_timesteps=T)
+        # self.scheduler = PNDMScheduler(num_train_timesteps=T)
         self.inferer   = DiffusionInferer(self.scheduler)
         self.lr        = lr
         self.ssim      = torchmetrics.StructuralSimilarityIndexMeasure(
@@ -68,7 +69,7 @@ class MonaiDDPM(pl.LightningModule):
 
     # ---------- sampling helpers ----------------------------------------
     @torch.no_grad()
-    def sample(self, label=0, N=16, size=64, guidance_scale=4.0, num_inference_steps=25, fp16=True):
+    def sample(self, label=0, N=16, size=64, guidance_scale=4.0, fp16=True, num_inference_steps=1000):
         if fp16:
             autocast_ctx = torch.autocast("cuda", dtype=torch.float16)
         else:
@@ -80,7 +81,8 @@ class MonaiDDPM(pl.LightningModule):
 
 
         # timesteps
-        self.scheduler.set_timesteps(self.hparams.T)
+        if num_inference_steps != self.hparams.T: # for faster-at-inference schedulers that were also used in training
+            self.scheduler.set_timesteps(num_inference_steps, device=device)
         timesteps = self.scheduler.timesteps       
         # build conditioning tensor (B, 1, cross_dim)
         if isinstance(label, int):
@@ -90,20 +92,70 @@ class MonaiDDPM(pl.LightningModule):
         context = torch.cat([uncond, cond], dim=0)      # (2B,1,C)
 
         x = noise
-        for t in tqdm(timesteps):
-            t_b  = torch.full((N,), t, device=device, dtype=torch.long)
-            t_bb = torch.cat([t_b, t_b], dim=0)         # (2B,)
+        
+        with autocast_ctx:
+            for t in tqdm(timesteps):
+                t_b  = torch.full((N,), t, device=device, dtype=torch.long)
+                t_bb = torch.cat([t_b, t_b], dim=0)         # (2B,)
 
-            # 1 forward pass with doubled batch
-            model_out = self.unet(torch.cat([x, x], dim=0), timesteps=t_bb, context=context)
-            eps_uncond, eps_cond = model_out.chunk(2)
+                # 1 forward pass with doubled batch
+                model_out = self.unet(torch.cat([x, x], dim=0), timesteps=t_bb, context=context)
+                eps_uncond, eps_cond = model_out.chunk(2)
 
-            eps = eps_uncond + guidance_scale * (eps_cond - eps_uncond)
-            x, _ = self.scheduler.step(eps, t, x)
+                eps = eps_uncond + guidance_scale * (eps_cond - eps_uncond)
+                x, _ = self.scheduler.step(eps, t, x)
 
         # after sampling
         x = (x + 1) / 2 # <- THIS ASSUMES TRAINING WITH [-1,1] WHICH WE HERE SCALE TO [0,1]
-        x = x.clamp(0, 1)
+        x = x.clamp(0, 1).float() # back to fp32 for NIFTI
         return x
 
         # return x.clamp(0, 1)     # images in [0,1]
+    # ---------- sampling helpers ----------------------------------------
+    @torch.no_grad()
+    def sample_fast(self, label=0, N=16, size=64, guidance_scale=4.0, num_inference_steps=25, fp16=True): # use this to infer faster, using a different scheduler than the one in training
+        if fp16:
+            autocast_ctx = torch.autocast("cuda", dtype=torch.float16)
+        else:
+            from contextlib import nullcontext
+            autocast_ctx = nullcontext()
+
+        device = self.device
+        noise = torch.randn(N, 1, size, size, device=device, dtype=torch.float16 if fp16 else torch.float32)
+
+
+        # timesteps
+        fast_scheduler = PNDMScheduler(
+            num_train_timesteps = self.scheduler.num_train_timesteps,
+            schedule            = getattr(self.scheduler, "schedule", "linear_beta"),
+            **getattr(self.scheduler, "_schedule_args", {})
+        )
+
+        fast_scheduler.set_timesteps(num_inference_steps=num_inference_steps)  
+        timesteps = fast_scheduler.timesteps       
+        # build conditioning tensor (B, 1, cross_dim)
+        if isinstance(label, int):
+            label = torch.full((N,), label, device=device, dtype=torch.long)
+        cond  = label.float().view(N, 1, 1)          # scalar to (B,1,1)
+        uncond = -1 * torch.ones_like(cond)
+        context = torch.cat([uncond, cond], dim=0)      # (2B,1,C)
+
+        x = noise
+        
+        with autocast_ctx:
+            for t in tqdm(timesteps):
+                t_b  = torch.full((N,), t, device=device, dtype=torch.long)
+                t_bb = torch.cat([t_b, t_b], dim=0)         # (2B,)
+
+                # 1 forward pass with doubled batch
+                model_out = self.unet(torch.cat([x, x], dim=0), timesteps=t_bb, context=context)
+                eps_uncond, eps_cond = model_out.chunk(2)
+
+                eps = eps_uncond + guidance_scale * (eps_cond - eps_uncond)
+                x, _ = fast_scheduler.step(eps, t, x)
+
+        # after sampling
+        x = (x + 1) / 2 # <- THIS ASSUMES TRAINING WITH [-1,1] WHICH WE HERE SCALE TO [0,1]
+        x = x.clamp(0, 1).float() # back to fp32 for NIFTI
+        return x
+

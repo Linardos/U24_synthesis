@@ -7,13 +7,13 @@ torch.manual_seed(2025)   # reproducible noise
 
 CONDITIONAL = True
 RESOLUTION = 256
-BATCH = 1       # keep RAM/VRAM sane; adjust to your GPU
-GUIDE_SCALE = 5.0
+BATCH = 32       # keep RAM/VRAM sane; adjust to your GPU
+GUIDE_SCALE = 3.0
 T = 1_000     
 
 # ckpt_path = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/049_cDDPM_depth5_fixedScaling_256x256/checkpoints/epoch=22-step=7843.ckpt"
 ckpt_path = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/054_DDPM_default512_256x256/checkpoints/epoch=04-step=1435.ckpt"
-ckpt_path = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/063_DDPM_contrast-aug-20percent_256x256/checkpoints/epoch=04-step=1435.ckpt"
+# ckpt_path = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/063_DDPM_contrast-aug-20percent_256x256/checkpoints/epoch=04-step=1435.ckpt"
 
 model = (MonaiDDPM
          .load_from_checkpoint(ckpt_path, map_location="cpu")   # keep GPU free
@@ -46,7 +46,19 @@ class_labels = {
     'probably_benign': 2,
     'suspicious': 3
 }
-
+# helper ─────────────────────────────────────────────────────────────
+def existing_count(dir_path):
+    """
+    Counts how many <class>/<XXXX>/slice.nii.gz exist.
+    Returns (count, highest_idx) so we can resume numbering.
+    """
+    pattern = os.path.join(dir_path, "[0-9]"*4, "slice.nii.gz")
+    files   = glob.glob(pattern)
+    if not files:
+        return 0, 0
+    # grab folder names like “…/0123/slice.nii.gz” → 123
+    idxs = [int(re.search(r"/([0-9]{4})/slice", f).group(1)) for f in files]
+    return len(idxs), max(idxs)
 # ---------------------------------------------------------------------
 #  GENERATION LOOP
 # ---------------------------------------------------------------------
@@ -54,6 +66,14 @@ for cls_name, n_total in target_counts.items():
     label_id = class_labels[cls_name]
     out_class_dir = os.path.join(SYN_ROOT, cls_name)
     os.makedirs(out_class_dir, exist_ok=True)
+
+    have, last_idx = existing_count(out_class_dir)
+    need           = max(0, n_total - have)
+    if need == 0:
+        print(f"{cls_name}: already has ≥{n_total} samples – skipping.")
+        continue
+
+    print(f"{cls_name}: {have} present, need {need} more.")
 
     generated = 0
     pbar = tqdm(total=n_total, desc=f"Synth {cls_name:16}")
