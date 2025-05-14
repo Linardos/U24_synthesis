@@ -113,9 +113,9 @@ train_transforms = mt.Compose(
 
 
         # Crop relevant area
-        mt.CropForegroundd(keys=["image"], source_key="image"),
-        mt.Resized(keys=["image"], spatial_size=(resize_dim, resize_dim),
-                   mode="bilinear", align_corners=False),
+        # mt.CropForegroundd(keys=["image"], source_key="image"),
+        # mt.Resized(keys=["image"], spatial_size=(resize_dim, resize_dim),
+        #            mode="bilinear", align_corners=False),
 
         # local-contrast aug now hits only 20 % of the images
         # mt.RandAdjustContrastd(keys=["image"],

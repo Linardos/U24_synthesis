@@ -1,5 +1,5 @@
 # Dataset Paths
-root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_512x512/train'  # Update based on your dataset
+root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train'  # Update based on your dataset
 data_dir: 'original'
 
 # Synthesis-Specific Parameters
@@ -8,12 +8,12 @@ data_mode: 'embed' # embed
 resize_dim: 256 # Resize data
 
 # Training Hyperparameters
-batch_size: 8  # Increased for more stable gradients
+batch_size: 16  # Increased for more stable gradients
 learning_rate: 0.00001
 num_epochs: 30  
 
 # Experiment Tracking
-experiment_name: 'PNDM_trial'
+experiment_name: 'DDPM_nocrop_SSIMloss'
 # experiment_name: '044_DDPM_deeper_128x128' # use suffix and full existing name to continue from checkpoint
 
 # Sanity checks

@@ -13,9 +13,6 @@ root_dir = config['root_dir']
 data_dir = config['data_dir']
 full_data_path = os.path.join(root_dir, data_dir)
 
-data_mode = config.get('data_mode', 'embed')  # 'embed', 'mnist', 'cifar'
-print(f"Loading data: {data_mode}")
-
 class NiftiSynthesisDataset(Dataset):
     def __init__(self, full_data_path, transform=None, samples_per_class=None):
         """

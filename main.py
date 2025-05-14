@@ -214,55 +214,8 @@ with open(csv_log_file, mode='w', newline='') as csvfile:
 
 # If k_folds is 0, perform holdout training; else, perform k-fold cross-validation
 if k_folds == 0:
-    # Holdout validation
-    # train_size = int((1 - val_split) * len(dataset))
-    # val_size = len(dataset) - train_size
-    # train_dataset, val_dataset = random_split(dataset, [train_size, val_size], generator=torch.Generator().manual_seed(random_seed))
     # Define the desired stratification ratio (5:3:2:1)
-    # class_ratios = {0: 5, 2: 3, 3: 2, 1: 1}  # Benign: Probably Benign: Suspicious: Malignant
-
-    # # Compute total weights
-    # total_weight = sum(class_ratios.values())
-
-    # # Get indices for each class
-    # class_indices = {label: np.where(labels == label)[0] for label in np.unique(labels)}
-
-    # # Create stratified train/val split using custom proportions
-    # train_indices = []
-    # val_indices = []
-
-    # for label, indices in class_indices.items():
-    #     # Compute how many samples go to validation
-    #     val_size = int(len(indices) * val_split)
-    #     train_size = len(indices) - val_size
-
-    #     # Adjust the split based on our custom ratio
-    #     val_adjusted = int((val_size / total_weight) * class_ratios[label] * total_weight)
-    #     train_adjusted = len(indices) - val_adjusted  # Remainder goes to training
-
-    #     # Split the data while preserving the 5:3:2:1 ratio
-    #     train_idx, val_idx = train_test_split(indices, test_size=val_adjusted, random_state=random_seed)
-
-    #     train_indices.extend(train_idx)
-    #     val_indices.extend(val_idx)
-
-    # # Convert to numpy arrays
-    # train_indices = np.array(train_indices)
-    # val_indices = np.array(val_indices)
-    # # train_indices, val_indices = train_test_split(np.arange(len(dataset)), test_size=val_split, stratify=labels, random_state=random_seed)
-    # train_dataset = Subset(dataset, train_indices)
-    # val_dataset = Subset(dataset, val_indices)
-
-    # train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    # val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-
-    # Define the desired stratification ratio (5:3:2:1)
-    # from sklearn.model_selection import train_test_split
-
-    # Define the desired stratification ratio (5:3:2:1)
-
-    # Define the desired stratification ratio (5:3:2:1)
-    class_ratios = {0: 5, 2: 3, 3: 2, 1: 1}  # Benign: Probably Benign: Suspicious: Malignant
+    class_ratios = {0: 3, 2: 2, 3: 2, 1: 1}  # Benign: Probably Benign: Suspicious: Malignant
     total_ratio = sum(class_ratios.values())
 
     # Get indices for each class
