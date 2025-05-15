@@ -16,9 +16,10 @@ CKPT_PATH  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/053
 CKPT_PATH  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/054_DDPM_default512_256x256/checkpoints/epoch=04-step=1435.ckpt" # FID @ GS 0: 7.38
 CKPT_PATH  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/057_DDPM_seed2025_cropped_256x256/checkpoints/epoch=04-step=1435.ckpt"
 CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/063_DDPM_contrast-aug-20percent_256x256/checkpoints/epoch=04-step=1435.ckpt"
+CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/092_DDPM_MS-SSIM_10perc_HF_5perc_256x256/checkpoints/epoch=18-step=2736.ckpt" # ACTUAL GOLD
 
 print(f"Evaluating {CKPT_PATH}")
-NAME_TAG = "002_Contrast"
+NAME_TAG = "003_10percMS-SSIM_5percHF_thebest"
 RESOLUTION = 256
 BATCH      = 8
 N_EVAL     = 128            # samples to evaluate per class, per scale
