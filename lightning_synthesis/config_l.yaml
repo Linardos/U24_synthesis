@@ -13,7 +13,7 @@ learning_rate: 0.00001
 num_epochs: 30  
 
 # Experiment Tracking
-experiment_name: 'DDPM_nocrop_SSIMloss'
+experiment_name: 'DDPM_MS-SSIM_10perc_HF_5perc'
 # experiment_name: '044_DDPM_deeper_128x128' # use suffix and full existing name to continue from checkpoint
 
 # Sanity checks
