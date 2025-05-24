@@ -6,7 +6,9 @@
 root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train'
 # root_dir: '/mnt/d/Datasets/EMBED/sanity_EMBED'
 data_dir: 'original' #'original' # 'stylegan_256x256', 'vqvae' , 'original'
-# data_dir: 'original_sanity_subset' #'original' # 'stylegan_256x256', 'vqvae' , 'original'
+synth_data_dir: 'synthetic_guide5.0'
+real_percentage: 1.0 # use 0 for full synthetic, use 0.25, 0.5, 0.75 for mix
+
 num_classes: 4
 
 batch_size: 16
@@ -19,8 +21,8 @@ val_split: 0.2
 # resize_height: 256
 # resize_width: 256
 model_names:
-  # - resnet50
-  - efficientnet_b0
+  - resnet50
+  # - efficientnet_b0
   # - densenet121
   # # - densenet169
   # # - densenet201
@@ -31,12 +33,8 @@ seed: 42
 sanity_check: False
 transform_check: basic # "basic" to just apply data preprocessing
 store_sample_per_epoch: True # to visualize images
-experiment_number: 39 # Add your experiment number here
-# experiment_name: sanity_BCSdata 
-# experiment_name: sanity_CMMDdata
-# experiment_name: sanity_DDSMdata 
-# experiment_name: sanity_inbreast
-# experiment_name: EMBED_multi_class_holdout
-experiment_name: EMBED_multi_class_holdout_efficientnet_stratified3221_seed42
+experiment_number: 40 # Add your experiment number here
+
+experiment_name: Resnet_5fold_seed42
 # experiment_name: sanity_EMBED_multi_class_CV
 # experiment_name: ThreeDataDM_augmentations

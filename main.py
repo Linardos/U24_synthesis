@@ -1,26 +1,25 @@
 import os
-import yaml
-import pickle
-import time
+import time, re, pickle, yaml
 import torch
 import torch.nn as nn
 import numpy as np
-from torch.utils.data import DataLoader, random_split, Subset
+from pathlib import Path
+from torch.utils.data import DataLoader, random_split, Subset, ConcatDataset
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torchvision import transforms
 from torchvision.utils import make_grid, save_image
 import matplotlib.pyplot as plt
 from sklearn.model_selection import StratifiedKFold, train_test_split, KFold
-from models import get_model  # Assuming get_model is defined in models.py
-from data_loaders import NiftiDataset  # Assuming NiftiDataset is defined in data_loaders_S.py
 from tqdm import tqdm
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, balanced_accuracy_score, precision_score, recall_score, f1_score
 import shutil
 import csv  # Import the csv module
 import random
 from scipy.ndimage import histogram
 from scipy.interpolate import interp1d
 
+from models import get_model  
+from data_loaders import NiftiDataset, stratified_real_synth_mix 
 
 
 # Load configuration from config.yaml
@@ -35,7 +34,10 @@ random.seed(random_seed)
 # Extract parameters from config
 root_dir = config['root_dir']
 data_dir = config['data_dir']
-full_data_path = os.path.join(root_dir, data_dir)
+synth_data_dir = config['synth_data_dir']
+real_percentage = config.get('real_percentage', 1.0)
+
+# full_data_path = os.path.join(root_dir, data_dir)
 batch_size = config['batch_size']
 learning_rate = config['learning_rate']
 weight_decay = config['weight_decay']
@@ -52,43 +54,35 @@ early_stopping_patience = config['early_stopping_patience']
 best_val_loss = float('inf')
 no_improvement_epochs = 0
 
-# Extract the final folder name from the data directory
-final_folder = data_dir
-
 # Store the config.yaml file in the current experiment folder
-experiment_folder = f'{experiment_number:03d}__{experiment_name}_{final_folder}'
-experiments_folder = 'experiments'
-experiment_path = os.path.join(experiments_folder, experiment_folder)
+# ── EXPERIMENT FOLDER ──────────────────────────────────────────────────────────
 
-print(f"Starting experiment for {data_dir}, whose variables will be stored at: {experiment_path}")
+# 1) make sure the base directory exists
+base_dir = Path("experiments")
+base_dir.mkdir(exist_ok=True)
 
-# Create experiment folder if it doesn't exist
-if not os.path.exists(experiment_path):
-    os.makedirs(experiment_path)
+# 2) collect existing prefixes that match "000__something"
+prefix_re = re.compile(r"^(\d{3})__")          # capture 3-digit prefix
+prefixes  = [
+    int(prefix_re.match(d.name).group(1))
+    for d in base_dir.iterdir()
+    if d.is_dir() and prefix_re.match(d.name)
+]
+
+# 3) choose the next number (start from 1 if folder is empty)
+next_num = max(prefixes, default=0) + 1        # default=0 handles no experiments yet
+next_tag = f"{next_num:03d}"                   # zero-pad to 3 digits
+
+# 4) compose the folder name and create it
+experiment_folder = f"{next_tag}__{experiment_name}_real_perc{real_percentage}"
+experiment_path   = base_dir / experiment_folder
+experiment_path.mkdir(exist_ok=False)          # error if duplicate
+
+print(f"New experiment folder: {experiment_path}")
 
 # Save config.yaml in the experiment folder
-shutil.copy('config.yaml', experiment_path)
+shutil.copy("config.yaml", experiment_path / "config.yaml")
 
-
-def compute_reference_histogram(dataset, num_samples=50):
-    all_pixels = []
-
-    # Extract pixel data from a subset of images
-    for i in range(min(num_samples, len(dataset))):
-        image, _ = dataset[i]  # Assuming dataset[i] returns (image, label)
-        all_pixels.extend(image.flatten().tolist())
-
-    # Compute histogram from all collected pixel values
-    hist, bin_edges = np.histogram(all_pixels, bins=256, range=(0, 1), density=True)
-    ref_cdf = hist.cumsum() / hist.sum()  # Normalize CDF to [0,1]
-    
-    return ref_cdf, bin_edges
-
-# Min-Max Normalization
-def min_max_normalization(tensor):
-    min_val = torch.min(tensor)
-    max_val = torch.max(tensor)
-    return (tensor - min_val) / (max_val - min_val + 1e-8)  # Avoid division by zero
 
 # Histogram Standardization using a reference CDF
 def histogram_standardization(img_tensor, ref_cdf, ref_bins):
@@ -101,33 +95,11 @@ def histogram_standardization(img_tensor, ref_cdf, ref_bins):
     
     return torch.tensor(img_standardized.reshape(img_tensor.shape), dtype=torch.float32)
 
-# Compute reference histogram from a few samples
-def compute_reference_histogram(sample_images):
-    all_pixels = np.concatenate([img.numpy().flatten() for img in sample_images])
-    hist, bin_edges = np.histogram(all_pixels, bins=256, range=(0, 1), density=True)
-    ref_cdf = np.cumsum(hist) / hist.sum()
-    return ref_cdf, bin_edges
-
 def min_max_normalization(tensor):
     min_val = torch.min(tensor)
     max_val = torch.max(tensor)
     normalized_tensor = (tensor - min_val) / (max_val - min_val)
     return normalized_tensor
-
-# Load the dataset to compute ref histogram
-# print(f"Loading data from {full_data_path}")
-# dataset = NiftiDataset(full_data_path=full_data_path, transform=None)  # Load without transform initially
-# print(f"Dataset contains {len(dataset)} samples.")
-# # Compute the reference histogram from the first 50 images
-# sample_images = [dataset[i][0] for i in range(min(50, len(dataset)))]  # Ensure we don't exceed dataset length
-# ref_cdf, ref_bins = compute_reference_histogram(sample_images)
-
-# Load a few sample images for reference histogram
-# sample_images = [dataset[i][0] for i in range(50)]  # Assuming dataset[i] returns (image, label)
-# ref_cdf, ref_bins = compute_reference_histogram(sample_images)
-
-# print("Reference histogram computed.")
-
 
 # Transform with random flipping
 if transform_check =='basic':
@@ -154,10 +126,35 @@ else:
     transform = None
 
 # Load the dataset with transformations applied
-print(f"Loading data from {full_data_path}")
-dataset = NiftiDataset(full_data_path=full_data_path, transform=transform)
+# ------------- paths -------------
+real_path  = os.path.join(root_dir, data_dir)
+synth_path = os.path.join(root_dir, synth_data_dir)
 
-print(f"Dataset contains {len(dataset)} samples.")
+print(f"Loading data from:\n  • {real_path}\n  • {synth_path}")
+
+# ------------- choose dataset(s) -------------
+if real_percentage == 1.0:
+    dataset = NiftiDataset(full_data_path=real_path, transform=transform)
+    n_real, n_synth = len(dataset), 0
+
+elif real_percentage == 0.0:
+    dataset = NiftiDataset(full_data_path=synth_path, transform=transform)
+    n_real, n_synth = 0, len(dataset)
+
+else:
+    real_ds  = NiftiDataset(full_data_path=real_path,  transform=transform)
+    synth_ds = NiftiDataset(full_data_path=synth_path, transform=transform)
+
+    dataset = stratified_real_synth_mix(real_ds, synth_ds,
+                                        real_fraction=real_percentage,
+                                        seed=random_seed)
+
+    # The mix returns ConcatDataset([real_subset, synth_subset])
+    n_real  = len(dataset.datasets[0])
+    n_synth = len(dataset.datasets[1])
+
+print(f"Final dataset: {len(dataset)}  (real {n_real}, synth {n_synth})")
+
 
 labels = []
 print("Processing for label summary...")
@@ -205,11 +202,15 @@ criterion = nn.CrossEntropyLoss()
 optimizers = {name: torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay) for name, model in models.items()}
 schedulers = {name: CosineAnnealingLR(optimizer, T_max=num_epochs) for name, optimizer in optimizers.items()}
 # CSV log file path
-csv_log_file = os.path.join(experiment_path, 'logs.csv')
+csv_log_file = experiment_path / "logs.csv"
 
 # Write CSV header
 with open(csv_log_file, mode='w', newline='') as csvfile:
-    fieldnames = ['fold', 'epoch', 'phase', 'model_name', 'loss', 'accuracy', 'AUC']
+    fieldnames = [
+        'fold', 'epoch', 'phase', 'model_name',
+        'loss', 'accuracy', 'AUC', 'balanced_accuracy',
+        'macro_precision', 'macro_recall', 'macro_f1'
+    ]
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
 
@@ -354,22 +355,7 @@ if k_folds == 0:
 
                 epoch_loss = running_loss / len(data_loader.dataset)
                 epoch_acc = correct_preds.double() / len(data_loader.dataset)
-                # if config['num_classes'] > 2:
-                #     epoch_auc = roc_auc_score(all_labels, all_preds, multi_class='ovo')
-                # else:
-                #     epoch_auc = roc_auc_score(all_labels, all_preds)
                 if config['num_classes'] > 2:
-                    # all_preds = np.array(all_preds)  # Convert list to numpy array
-                    # print("Shape of all_preds:", all_preds.shape)
-                    # print("allpreds is", all_preds)
-
-                    # # Ensure correct shape
-                    # if all_preds.ndim == 1:
-                    #     all_preds = all_preds.reshape(-1, config['num_classes'])
-
-                    # # Normalize predictions if needed
-                    # if not np.allclose(np.sum(all_preds, axis=1), 1.0):
-                    #     all_preds = all_preds / all_preds.sum(axis=1, keepdims=True)
 
                     epoch_auc = roc_auc_score(all_labels, all_preds, multi_class='ovr')
                 else:
@@ -401,7 +387,7 @@ if k_folds == 0:
         for scheduler in schedulers.values():
             scheduler.step()
         
-        checkpoint_path = os.path.join(experiment_path, f'checkpoint_epoch_{epoch + 1}.pth')
+        checkpoint_path = experiment_path / f"checkpoint_epoch_{epoch+1}.pth"
         torch.save({
             'epoch': epoch + 1,
             'model_state_dict': {model_name: model.state_dict() for model_name, model in models.items()},
@@ -495,8 +481,14 @@ else:
                     epoch_acc = correct_preds.double() / len(data_loader.dataset)
                     if config['num_classes'] > 2:
                         epoch_auc = roc_auc_score(all_labels, all_preds, multi_class='ovr')
+                        balanced_acc = balanced_accuracy_score(all_labels, np.argmax(all_preds, axis=1))
+                        macro_precision = precision_score(all_labels, np.argmax(all_preds, axis=1), average='macro')
+                        macro_recall = recall_score(all_labels, np.argmax(all_preds, axis=1), average='macro')
+                        macro_f1 = f1_score(all_labels, np.argmax(all_preds, axis=1), average='macro')
                     else:
                         epoch_auc = roc_auc_score(all_labels, all_preds)
+                        
+
 
                     print(f'{model_name} - {phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f} AUC: {epoch_auc:.4f}')
 
@@ -509,5 +501,13 @@ else:
                             'model_name': model_name,
                             'loss': epoch_loss,
                             'accuracy': epoch_acc.item(),
-                            'AUC': epoch_auc
+                            'AUC': epoch_auc,
+                            'balanced_accuracy': balanced_acc,
+                            'macro_precision': macro_precision,
+                            'macro_recall': macro_recall,
+                            'macro_f1': macro_f1
                         })
+
+            if no_improvement_epochs >= early_stopping_patience:
+                print(f"Early stopping triggered. No improvement for {early_stopping_patience} epochs.")
+                break
