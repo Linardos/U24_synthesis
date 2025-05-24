@@ -3,13 +3,13 @@
 # root_dir: '/mnt/d/Datasets/SanityCMMD_train'
 # root_dir: '/mnt/d/Datasets/SanityDDSM_train'
 # root_dir: '/mnt/d/Datasets/SanityInBreast_train'
-root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean/train'
+root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train'
 # root_dir: '/mnt/d/Datasets/EMBED/sanity_EMBED'
 data_dir: 'original' #'original' # 'stylegan_256x256', 'vqvae' , 'original'
 # data_dir: 'original_sanity_subset' #'original' # 'stylegan_256x256', 'vqvae' , 'original'
 num_classes: 4
 
-batch_size: 24
+batch_size: 16
 learning_rate: 0.001
 weight_decay: 0.00001
 early_stopping_patience: 20
@@ -26,16 +26,17 @@ model_names:
   # # - densenet201
   # - vgg16
   # - vgg19
-k_folds: 0 # 0 is hold out, increase for cross-validation, ideally 5
+k_folds: 5 # 0 is hold out, increase for cross-validation, ideally 5
+seed: 42
 sanity_check: False
 transform_check: basic # "basic" to just apply data preprocessing
 store_sample_per_epoch: True # to visualize images
-experiment_number: 38 # Add your experiment number here
+experiment_number: 39 # Add your experiment number here
 # experiment_name: sanity_BCSdata 
 # experiment_name: sanity_CMMDdata
 # experiment_name: sanity_DDSMdata 
 # experiment_name: sanity_inbreast
 # experiment_name: EMBED_multi_class_holdout
-experiment_name: EMBED_multi_class_holdout_efficientnet_stratified5321
+experiment_name: EMBED_multi_class_holdout_efficientnet_stratified3221_seed42
 # experiment_name: sanity_EMBED_multi_class_CV
 # experiment_name: ThreeDataDM_augmentations

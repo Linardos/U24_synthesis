@@ -5,15 +5,15 @@ data_dir: 'original'
 # Synthesis-Specific Parameters
 drop_birads_3: True # probably benign is tough to classify
 data_mode: 'embed' # embed
-resize_dim: 256 # Resize data
+# resize_dim: 256 # Resize data
 
 # Training Hyperparameters
-batch_size: 16  # Increased for more stable gradients
+batch_size: 8  # Increased for more stable gradients
 learning_rate: 0.00001
 num_epochs: 30  
 
 # Experiment Tracking
-experiment_name: 'DDPM_MS-SSIM_10perc_HF_5perc'
+experiment_name: 'DDPM_MS-SSIM_10perc_HF_5perc_quicktest'
 # experiment_name: '044_DDPM_deeper_128x128' # use suffix and full existing name to continue from checkpoint
 
 # Sanity checks

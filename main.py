@@ -22,15 +22,16 @@ from scipy.ndimage import histogram
 from scipy.interpolate import interp1d
 
 
-# Set random seed for reproducibility
-random_seed = 42
-np.random.seed(random_seed)
-torch.manual_seed(random_seed)
-random.seed(random_seed)
+
 # Load configuration from config.yaml
 with open('config.yaml', 'r') as f:
     config = yaml.safe_load(f)
 
+# Set random seed for reproducibility
+random_seed = config['seed']
+np.random.seed(random_seed)
+torch.manual_seed(random_seed)
+random.seed(random_seed)
 # Extract parameters from config
 root_dir = config['root_dir']
 data_dir = config['data_dir']

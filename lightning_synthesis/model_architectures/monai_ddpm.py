@@ -124,7 +124,7 @@ class MonaiDDPM(pl.LightningModule):
             loss = (
                 self.w_mse * mse +
                 self.w_ssim * ms_ssim +
-                0.05 * hf_loss                     # << tiny HF weight
+                self.w_hf * hf_loss                 # << tiny HF weight
             )
 
             self.log_dict(
@@ -133,13 +133,48 @@ class MonaiDDPM(pl.LightningModule):
 
         return loss
 
+    # ------------------------------------------------------------------
+    def validation_step(self, batch, _):
+        x0, labels = batch
+        eps   = torch.randn_like(x0)
+        t     = torch.randint(
+                0, self.scheduler.num_train_timesteps,
+                (x0.size(0),), device=self.device).long()
+        xt    = self.scheduler.add_noise(x0, eps, t)
+        eps_hat = self.unet(xt, t, context=labels)
+
+        mse = F.mse_loss(eps_hat.float(), eps.float())
+
+        # reconstruct x0_hat (needed for SSIM / HF)
+        alpha_bar = self.scheduler.alphas_cumprod[t].view(-1,1,1,1)
+        x0_hat = (xt - torch.sqrt(1-alpha_bar)*eps_hat) / torch.sqrt(alpha_bar)
+        x0_hat = x0_hat.clamp(-1, 1)
+
+        ms_ssim = 1.0 - self.ssim((x0_hat+1)/2, (x0+1)/2)
+        hf_loss = self.hf(x0_hat, x0)
+
+        val_loss = (
+            self.w_mse * mse +
+            self.w_ssim * ms_ssim +
+            self.w_hf  * hf_loss
+        )
+
+        self.log_dict(
+            {"val_loss": val_loss,
+            "val_mse": mse,
+            "val_ms_ssim": ms_ssim,
+            "val_hf": hf_loss},
+            prog_bar=False, logger=True, on_step=False, on_epoch=True
+        )
+        return val_loss
+
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr)
 
     # ---------- sampling helpers ----------------------------------------
     @torch.no_grad()
-    def sample(self, label=0, N=16, size=64, guidance_scale=4.0, fp16=True):
+    def sample(self, label=0, N=16, size=256, guidance_scale=4.0, fp16=True):
         if fp16:
             autocast_ctx = torch.autocast("cuda", dtype=torch.float16)
         else:

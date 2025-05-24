@@ -141,6 +141,25 @@ train_transforms = mt.Compose(
 )
 
 dataset = NiftiSynthesisDataset(full_data_path, transform=train_transforms)
+
+# ------ uncomment this for validaiton split
+# val_frac = 0.1                     # 10 % for validation
+# val_len  = int(len(dataset) * val_frac)
+# train_len = len(dataset) - val_len
+# train_ds, val_ds = torch.utils.data.random_split(dataset, [train_len, val_len],
+#                                 generator=torch.Generator().manual_seed(42))
+
+# train_loader = torch.utils.data.DataLoader(
+#     train_ds, batch_size=batch_size, shuffle=True,
+#     num_workers=8, persistent_workers=True, pin_memory=True
+# )
+# val_loader = torch.utils.data.DataLoader(
+#     val_ds, batch_size=batch_size, shuffle=False,
+#     num_workers=4, persistent_workers=True, pin_memory=True
+# )
+
+
+# ------ comment out for validation split
 train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, persistent_workers=True, pin_memory=True)
 img_batch, _ = next(iter(train_loader))
 print(img_batch.shape, img_batch.min().item(), img_batch.max().item())
@@ -193,8 +212,8 @@ checkpoint_callback = ModelCheckpoint(
     mode="min",
 )
 early_stopping = EarlyStopping(
-    monitor="train_loss",
-    patience=15,
+    monitor="train_loss", #change to val_loss unless you're generating a final model
+    patience=10,
     mode="min",
     check_on_train_epoch_end=True,
 )
@@ -216,7 +235,8 @@ trainer = pl.Trainer(
     )
 
 
-trainer.fit(model, train_dataloaders=train_loader)
+trainer.fit(model, train_dataloaders=train_loader) #, validation_loaders=val_loader)
+
 
 print('Training complete!')
 
