@@ -11,7 +11,7 @@ real_percentage: 1.0 # use 0 for full synthetic, use 0.25, 0.5, 0.75 for mix
 
 num_classes: 4
 
-batch_size: 16
+batch_size: 32
 learning_rate: 0.001
 weight_decay: 0.00001
 early_stopping_patience: 20
@@ -29,12 +29,11 @@ model_names:
   # - vgg16
   # - vgg19
 k_folds: 5 # 0 is hold out, increase for cross-validation, ideally 5
-seed: 42
+seed: 44
 sanity_check: False
 transform_check: basic # "basic" to just apply data preprocessing
 store_sample_per_epoch: True # to visualize images
-experiment_number: 40 # Add your experiment number here
 
-experiment_name: Resnet_5fold_seed42
+experiment_name: dual5foldstrat
 # experiment_name: sanity_EMBED_multi_class_CV
 # experiment_name: ThreeDataDM_augmentations

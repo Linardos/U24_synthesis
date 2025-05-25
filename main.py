@@ -1,5 +1,6 @@
 import os
-import time, re, pickle, yaml
+import shutil, csv, pickle, yaml, json
+import time, re, random
 import torch
 import torch.nn as nn
 import numpy as np
@@ -12,10 +13,7 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import StratifiedKFold, train_test_split, KFold
 from tqdm import tqdm
 from sklearn.metrics import roc_auc_score, balanced_accuracy_score, precision_score, recall_score, f1_score
-import shutil
-import csv  # Import the csv module
-import random
-from scipy.ndimage import histogram
+
 from scipy.interpolate import interp1d
 
 from models import get_model  
@@ -74,7 +72,7 @@ next_num = max(prefixes, default=0) + 1        # default=0 handles no experiment
 next_tag = f"{next_num:03d}"                   # zero-pad to 3 digits
 
 # 4) compose the folder name and create it
-experiment_folder = f"{next_tag}__{experiment_name}_real_perc{real_percentage}"
+experiment_folder = f"{next_tag}_{model_names[0]}_{experiment_name}_seed{random_seed}_real_perc{real_percentage}"
 experiment_path   = base_dir / experiment_folder
 experiment_path.mkdir(exist_ok=False)          # error if duplicate
 
@@ -117,7 +115,7 @@ elif transform_check =='augmentations':
         transforms.RandomRotation(degrees=15),
         transforms.Lambda(lambda x: min_max_normalization(x)),  # Min-max normalization,
         transforms.Normalize(mean=[0.5], std=[0.5]),  # Normalize the grayscale channel
-        transforms.Lambda(lambda x: apply_gaussian_denoise(x)),
+        # transforms.Lambda(lambda x: apply_gaussian_denoise(x)),
         transforms.RandomHorizontalFlip(),
         transforms.RandomVerticalFlip()
     ])
@@ -154,7 +152,6 @@ else:
     n_synth = len(dataset.datasets[1])
 
 print(f"Final dataset: {len(dataset)}  (real {n_real}, synth {n_synth})")
-
 
 labels = []
 print("Processing for label summary...")
@@ -214,89 +211,74 @@ with open(csv_log_file, mode='w', newline='') as csvfile:
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
 
-# If k_folds is 0, perform holdout training; else, perform k-fold cross-validation
-if k_folds == 0:
-    # Define the desired stratification ratio (5:3:2:1)
-    class_ratios = {0: 3, 2: 2, 3: 2, 1: 1}  # Benign: Probably Benign: Suspicious: Malignant
-    total_ratio = sum(class_ratios.values())
+# k-Fold cross-validation ------------
+# 0/1 flag for synthetic vs real
+is_synth = np.zeros(len(dataset), dtype=int)
+if isinstance(dataset, ConcatDataset):
+    # ConcatDataset([real_subset, synth_subset])
+    is_synth[len(dataset.datasets[0]):] = 1        # mark synthetic part
 
-    # Get indices for each class
-    class_indices = {label: np.where(labels == label)[0] for label in np.unique(labels)}
+# composite label: class_id * 2 + is_synth
+strat_key = labels * 2 + is_synth                 # values 0..(2*num_classes-1)
 
-    # Compute total validation set size
-    total_val_size = int(len(dataset) * val_split)
+# stratification logic:
+# | clinical class | real / synth | composite value |
+# | -------------- | ------------ | --------------- |
+# | Benign         | real (0)     | 0               |
+# | Benign         | synth (1)    | 1               |
+# | Malignant      | real (0)     | 2               |
+# | Malignant      | synth (1)    | 3               |
+# | ...            | …            | …               |
+# Because each pair has its own code, StratifiedKFold will treat them as separate “classes” and keep all eight (4 clinical × 2 sources) in equal proportion in every fold.
 
-    # Compute how many samples per class should go to validation
-    val_class_sizes = {}
-    for label, indices in class_indices.items():
-        if label == 1:  # Malignant, should be ~20% validation
-            val_class_sizes[label] = int(len(indices) * 0.2)  # 20% of Malignant cases in validation
-        else:  # Other classes follow 5:3:2
-            val_class_sizes[label] = int((class_ratios[label] / total_ratio) * total_val_size)
+# Dataset composition	is_synth vector	strat_key values produced	What StratifiedKFold balances
+# All real	all 0	labels * 2 → 0, 2, 4, 6…	Only the clinical classes (Benign-real, Malignant-real, …). There are no “synthetic” codes, so folds stay class-balanced exactly as in the ordinary case.
+# All synthetic	all 1	labels * 2 + 1 → 1, 3, 5, 7…	Again you get one unique code per clinical class, just offset by +1. Folds are still class-balanced; the “source” dimension is moot because every sample shares the same source.
 
-    train_indices, val_indices = [], []
+kfold = StratifiedKFold(n_splits=k_folds,
+                        shuffle=True,
+                        random_state=random_seed)
+# kfold = KFold(n_splits=k_folds, shuffle=True, random_state=random_seed)
 
-    # Stratified sampling for each class
-    for label, indices in class_indices.items():
-        # Ensure validation set does not take too much from a class
-        val_size = max(1, min(val_class_sizes[label], len(indices) - 1))
+# for fold, (train_indices, val_indices) in enumerate(kfold.split(dataset)):
+    
+for fold, (train_idx, val_idx) in enumerate(kfold.split(np.zeros(len(strat_key)), strat_key)):
+    print(f'Fold {fold + 1}/{k_folds}')
+    print('-' * 10)
 
-        # Convert val_size to fraction for train_test_split()
-        test_fraction = val_size / len(indices) if len(indices) > 1 else 0.5
+    # ------ identify real vs synthetic indices in this fold -------
+    if isinstance(dataset, ConcatDataset):
+        split = len(dataset.datasets[0])
+        real_train   = train_idx[train_idx <  split]
+        synth_train  = train_idx[train_idx >= split]
+        real_val     = val_idx[val_idx <  split]
+        synth_val    = val_idx[val_idx >= split]
+    else:  # pure real or pure synthetic
+        real_train, synth_train = (train_idx, np.array([], int)) if n_real else (np.array([], int), train_idx)
+        real_val,   synth_val   = (val_idx,   np.array([], int)) if n_real else (np.array([], int), val_idx)
 
-        # Split the class-specific data
-        train_idx, val_idx = train_test_split(indices, test_size=test_fraction, random_state=random_seed)
+    idx_info = {
+        "train_real" : real_train.tolist(),
+        "train_synth": synth_train.tolist(),
+        "val_real"   : real_val.tolist(),
+        "val_synth"  : synth_val.tolist(),
+    }
+    with open(experiment_path / f"indices_fold{fold+1}.json", "w") as f:
+        json.dump(idx_info, f, indent=2)
+    # --------------------------------------------------------------
 
-        train_indices.extend(train_idx)
-        val_indices.extend(val_idx)
+    train_subset = Subset(dataset, train_idx)
+    val_subset = Subset(dataset, val_idx)
 
-    # Convert to numpy arrays
-    train_indices = np.array(train_indices)
-    val_indices = np.array(val_indices)
+    train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)
 
-    # Create dataset subsets
-    train_dataset = Subset(dataset, train_indices)
-    val_dataset = Subset(dataset, val_indices)
-
-    # Create DataLoaders
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
-
-    # Debugging Check: Print final label distribution
-    train_label_counts = np.bincount([labels[i] for i in train_indices])
-    val_label_counts = np.bincount([labels[i] for i in val_indices])
-
-    print("Training set distribution:", train_label_counts)
-    print("Validation set distribution:", val_label_counts)
-
-
-
-    def load_checkpoint(checkpoint_path):
-        checkpoint = torch.load(checkpoint_path)
-        for model_name, model in models.items():
-            model.load_state_dict(checkpoint['model_state_dict'][model_name])
-        for model_name, optim in optimizers.items():
-            optim.load_state_dict(checkpoint['optimizer_state_dict'][model_name])
-        for model_name, sched in schedulers.items():
-            sched.load_state_dict(checkpoint['scheduler_state_dict'][model_name])
-        return checkpoint['epoch'], checkpoint['best_val_loss'], checkpoint['no_improvement_epochs']
-
-    # Load from checkpoint if exists
-    latest_checkpoint = os.path.join(experiment_path, 'latest_checkpoint.pth')
-    if os.path.exists(latest_checkpoint):
-        start_epoch, best_val_loss, no_improvement_epochs = load_checkpoint(latest_checkpoint)
-        print(f'Resuming training from epoch {start_epoch}')
-    else:
-        start_epoch = 0
-        best_val_loss = float('inf')
-        no_improvement_epochs = 0
-
+    best_val_loss = float('inf')
+    no_improvement_epochs = 0
 
     # Training and evaluation loop
-    for epoch in range(start_epoch, num_epochs):
-        batch_saved = False  # Visualize images and save only the first batch in each epoch
+    for epoch in range(num_epochs):
         print(f'Epoch {epoch + 1}/{num_epochs}')
-        print('-' * 10)
 
         for phase in ['train', 'val']:
             for model_name, model in models.items():
@@ -311,7 +293,6 @@ if k_folds == 0:
                 correct_preds = 0
                 all_labels = []
                 all_preds = []
-
 
                 for inputs, labels in tqdm(data_loader):
                     inputs = inputs.to(device)
@@ -332,34 +313,25 @@ if k_folds == 0:
                     running_loss += loss.item() * inputs.size(0)
                     correct_preds += torch.sum(preds == labels.data)
                     all_labels.extend(labels.cpu().numpy())
-
+                    # all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy()[:, 1])
+                    
                     if config['num_classes'] > 2:
                         all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy())  # Store all class probabilities
                     else:
                         all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy()[:, 1])
 
-                    # Save a grid of images for visual inspection (one batch per epoch)
-                    if not batch_saved:
-                        malignant_images = inputs[labels == 1][:6]  # Select up to 6 malignant samples
-                        benign_images = inputs[labels == 0][:6]     # Select up to 6 benign samples
-                        
-                        if len(malignant_images) == 6 and len(benign_images) == 6:
-                            grid_images = torch.cat((benign_images, malignant_images), 0)  # Stack benign and malignant
-                            grid = make_grid(grid_images, nrow=6, padding=2, normalize=True)
-
-                            # Save grid as an image file
-                            img_path = os.path.join(experiment_path, f'epoch_{epoch + 1}_batch.png')
-                            save_image(grid, img_path)
-                            print(f'Saved image grid for epoch {epoch + 1} to {img_path}')
-                            batch_saved = True  # Only save the first batch of each epoch
 
                 epoch_loss = running_loss / len(data_loader.dataset)
                 epoch_acc = correct_preds.double() / len(data_loader.dataset)
                 if config['num_classes'] > 2:
-
                     epoch_auc = roc_auc_score(all_labels, all_preds, multi_class='ovr')
+                    balanced_acc = balanced_accuracy_score(all_labels, np.argmax(all_preds, axis=1))
+                    macro_precision = precision_score(all_labels, np.argmax(all_preds, axis=1), average='macro')
+                    macro_recall = recall_score(all_labels, np.argmax(all_preds, axis=1), average='macro')
+                    macro_f1 = f1_score(all_labels, np.argmax(all_preds, axis=1), average='macro')
                 else:
                     epoch_auc = roc_auc_score(all_labels, all_preds)
+                    
 
 
                 print(f'{model_name} - {phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f} AUC: {epoch_auc:.4f}')
@@ -367,147 +339,29 @@ if k_folds == 0:
                 with open(csv_log_file, mode='a', newline='') as csvfile:
                     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                     writer.writerow({
-                        'fold': 'Holdout',
+                        'fold': fold + 1,
                         'epoch': epoch + 1,
                         'phase': phase,
                         'model_name': model_name,
                         'loss': epoch_loss,
                         'accuracy': epoch_acc.item(),
-                        'AUC': epoch_auc
-                    })
+                        'AUC': epoch_auc,
+                        'balanced_accuracy': balanced_acc,
+                        'macro_precision': macro_precision,
+                        'macro_recall': macro_recall,
+                        'macro_f1': macro_f1
+                        })
 
-                # Early stopping check
                 if phase == 'val':
                     if epoch_loss < best_val_loss:
                         best_val_loss = epoch_loss
                         no_improvement_epochs = 0  # Reset counter if there’s improvement
                     else:
                         no_improvement_epochs += 1  # Increment counter if no improvement
-
+                    
         for scheduler in schedulers.values():
             scheduler.step()
-        
-        checkpoint_path = experiment_path / f"checkpoint_epoch_{epoch+1}.pth"
-        torch.save({
-            'epoch': epoch + 1,
-            'model_state_dict': {model_name: model.state_dict() for model_name, model in models.items()},
-            'optimizer_state_dict': {model_name: optim.state_dict() for model_name, optim in optimizers.items()},
-            'scheduler_state_dict': {model_name: sched.state_dict() for model_name, sched in schedulers.items()},
-            'best_val_loss': best_val_loss,
-            'no_improvement_epochs': no_improvement_epochs
-        }, checkpoint_path)
-        print(f'Checkpoint saved at {checkpoint_path}')
-
 
         if no_improvement_epochs >= early_stopping_patience:
             print(f"Early stopping triggered. No improvement for {early_stopping_patience} epochs.")
             break
-
-        if config['sanity_check']:
-            # Sanity check with probability output
-            print("Running a sanity check for predictions and labels with probabilities. Aim of this check is to overfit training data.")
-            for inputs, labels in train_loader:
-                inputs = inputs.to(device)
-                labels = labels.to(device)
-                outputs = model(inputs)
-                _, preds = torch.max(outputs, 1)
-                # probs = outputs.softmax(dim=1).cpu().detach().numpy()
-                probs = torch.sigmoid(outputs).cpu().detach().numpy()
-                # binary_preds = (probs > 0.5).astype(int)
-                print(f'Preds: {preds}, Labels: {labels.cpu().numpy()}, Probabilities: {probs}')
-                # print(f'Preds: {preds.cpu().numpy()}, Labels: {labels.cpu().numpy()}, Probabilities: {probs}')
-                break
-
-else:
-    # k-Fold cross-validation
-    kfold = KFold(n_splits=k_folds, shuffle=True, random_state=random_seed)
-
-    for fold, (train_indices, val_indices) in enumerate(kfold.split(dataset)):
-        print(f'Fold {fold + 1}/{k_folds}')
-        print('-' * 10)
-
-        train_subset = Subset(dataset, train_indices)
-        val_subset = Subset(dataset, val_indices)
-
-        train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
-        val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)
-
-        # Training and evaluation loop
-        for epoch in range(num_epochs):
-            print(f'Epoch {epoch + 1}/{num_epochs}')
-
-            for phase in ['train', 'val']:
-                for model_name, model in models.items():
-                    if phase == 'train':
-                        model.train()
-                        data_loader = train_loader
-                    else:
-                        model.eval()
-                        data_loader = val_loader
-
-                    running_loss = 0.0
-                    correct_preds = 0
-                    all_labels = []
-                    all_preds = []
-
-                    for inputs, labels in tqdm(data_loader):
-                        inputs = inputs.to(device)
-                        labels = labels.to(device)
-
-                        if phase == 'train':
-                            optimizers[model_name].zero_grad()
-
-                        with torch.set_grad_enabled(phase == 'train'):
-                            outputs = model(inputs)
-                            loss = criterion(outputs, labels)
-                            _, preds = torch.max(outputs, 1)
-
-                            if phase == 'train':
-                                loss.backward()
-                                optimizers[model_name].step()
-
-                        running_loss += loss.item() * inputs.size(0)
-                        correct_preds += torch.sum(preds == labels.data)
-                        all_labels.extend(labels.cpu().numpy())
-                        # all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy()[:, 1])
-                        
-                        if config['num_classes'] > 2:
-                            all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy())  # Store all class probabilities
-                        else:
-                            all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy()[:, 1])
-
-
-                    epoch_loss = running_loss / len(data_loader.dataset)
-                    epoch_acc = correct_preds.double() / len(data_loader.dataset)
-                    if config['num_classes'] > 2:
-                        epoch_auc = roc_auc_score(all_labels, all_preds, multi_class='ovr')
-                        balanced_acc = balanced_accuracy_score(all_labels, np.argmax(all_preds, axis=1))
-                        macro_precision = precision_score(all_labels, np.argmax(all_preds, axis=1), average='macro')
-                        macro_recall = recall_score(all_labels, np.argmax(all_preds, axis=1), average='macro')
-                        macro_f1 = f1_score(all_labels, np.argmax(all_preds, axis=1), average='macro')
-                    else:
-                        epoch_auc = roc_auc_score(all_labels, all_preds)
-                        
-
-
-                    print(f'{model_name} - {phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f} AUC: {epoch_auc:.4f}')
-
-                    with open(csv_log_file, mode='a', newline='') as csvfile:
-                        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                        writer.writerow({
-                            'fold': fold + 1,
-                            'epoch': epoch + 1,
-                            'phase': phase,
-                            'model_name': model_name,
-                            'loss': epoch_loss,
-                            'accuracy': epoch_acc.item(),
-                            'AUC': epoch_auc,
-                            'balanced_accuracy': balanced_acc,
-                            'macro_precision': macro_precision,
-                            'macro_recall': macro_recall,
-                            'macro_f1': macro_f1
-                        })
-
-            if no_improvement_epochs >= early_stopping_patience:
-                print(f"Early stopping triggered. No improvement for {early_stopping_patience} epochs.")
-                break
