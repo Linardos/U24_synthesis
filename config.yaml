@@ -33,7 +33,8 @@ seed: 44
 sanity_check: False
 transform_check: basic # "basic" to just apply data preprocessing
 store_sample_per_epoch: True # to visualize images
+experiment_number: 43
 
-experiment_name: dual5foldstrat
+experiment_name: dualstratified_confusion_stored
 # experiment_name: sanity_EMBED_multi_class_CV
 # experiment_name: ThreeDataDM_augmentations

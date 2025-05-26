@@ -12,7 +12,7 @@ from torchvision.utils import make_grid, save_image
 import matplotlib.pyplot as plt
 from sklearn.model_selection import StratifiedKFold, train_test_split, KFold
 from tqdm import tqdm
-from sklearn.metrics import roc_auc_score, balanced_accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import roc_auc_score, balanced_accuracy_score, confusion_matrix
 
 from scipy.interpolate import interp1d
 
@@ -59,17 +59,17 @@ no_improvement_epochs = 0
 base_dir = Path("experiments")
 base_dir.mkdir(exist_ok=True)
 
-# 2) collect existing prefixes that match "000__something"
-prefix_re = re.compile(r"^(\d{3})__")          # capture 3-digit prefix
-prefixes  = [
-    int(prefix_re.match(d.name).group(1))
-    for d in base_dir.iterdir()
-    if d.is_dir() and prefix_re.match(d.name)
-]
+# # 2) collect existing prefixes that match "000__something"
+# prefix_re = re.compile(r"^(\d{3})__")          # capture 3-digit prefix
+# prefixes  = [
+#     int(prefix_re.match(d.name).group(1))
+#     for d in base_dir.iterdir()
+#     if d.is_dir() and prefix_re.match(d.name)
+# ]
 
-# 3) choose the next number (start from 1 if folder is empty)
-next_num = max(prefixes, default=0) + 1        # default=0 handles no experiments yet
-next_tag = f"{next_num:03d}"                   # zero-pad to 3 digits
+# # 3) choose the next number (start from 1 if folder is empty)
+# next_num = max(prefixes, default=0) + 1        # default=0 handles no experiments yet
+next_tag = f"{experiment_number:03d}"                   # zero-pad to 3 digits
 
 # 4) compose the folder name and create it
 experiment_folder = f"{next_tag}_{model_names[0]}_{experiment_name}_seed{random_seed}_real_perc{real_percentage}"
@@ -180,7 +180,7 @@ label_names = {
     3: 'Suspicious'
 }
 label_summary = {label_names[label]: count for label, count in zip(unique_labels, label_counts)}
-
+CLASS_NAMES = ["Benign", "Malignant", "Probably Benign", "Suspicious"]
 
 print("Dataset Summary:")
 for label, count in label_summary.items():
@@ -204,10 +204,12 @@ csv_log_file = experiment_path / "logs.csv"
 # Write CSV header
 with open(csv_log_file, mode='w', newline='') as csvfile:
     fieldnames = [
-        'fold', 'epoch', 'phase', 'model_name',
-        'loss', 'accuracy', 'AUC', 'balanced_accuracy',
-        'macro_precision', 'macro_recall', 'macro_f1'
+        'fold','epoch','phase','model_name',
+        'loss','accuracy','AUC','balanced_accuracy',
+        'recall_benign','recall_malignant',
+        'recall_prob_benign','recall_suspicious'
     ]
+
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
 
@@ -319,16 +321,30 @@ for fold, (train_idx, val_idx) in enumerate(kfold.split(np.zeros(len(strat_key))
                         all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy())  # Store all class probabilities
                     else:
                         all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy()[:, 1])
+                        
+                # turn probabilities → class index once, reuse everywhere
+                y_true = np.array(all_labels)
+                y_pred = np.argmax(all_preds, axis=1)
 
+                # ---- NEW: per-class recall --------------------------------------------
+                cm = confusion_matrix(y_true, y_pred, labels=range(len(CLASS_NAMES)))
+                per_class_recall = cm.diagonal() / cm.sum(axis=1)      # vector of length 4
+
+                # store the confusion matrix, in case we need another metric after training
+
+                cm_file = experiment_path / f"cm_fold{fold+1}_epoch{epoch+1}_{phase}.npy"
+                np.save(cm_file, cm)
+
+                # -----------------------------------------------------------------------
 
                 epoch_loss = running_loss / len(data_loader.dataset)
                 epoch_acc = correct_preds.double() / len(data_loader.dataset)
                 if config['num_classes'] > 2:
                     epoch_auc = roc_auc_score(all_labels, all_preds, multi_class='ovr')
                     balanced_acc = balanced_accuracy_score(all_labels, np.argmax(all_preds, axis=1))
-                    macro_precision = precision_score(all_labels, np.argmax(all_preds, axis=1), average='macro')
-                    macro_recall = recall_score(all_labels, np.argmax(all_preds, axis=1), average='macro')
-                    macro_f1 = f1_score(all_labels, np.argmax(all_preds, axis=1), average='macro')
+                    cm = confusion_matrix(y_true, y_pred, labels=range(len(CLASS_NAMES)))
+                    per_class_recall = cm.diagonal() / cm.sum(axis=1)      # vector of length 4
+                    # -----------------------------------------------------------------------
                 else:
                     epoch_auc = roc_auc_score(all_labels, all_preds)
                     
@@ -347,12 +363,18 @@ for fold, (train_idx, val_idx) in enumerate(kfold.split(np.zeros(len(strat_key))
                         'accuracy': epoch_acc.item(),
                         'AUC': epoch_auc,
                         'balanced_accuracy': balanced_acc,
-                        'macro_precision': macro_precision,
-                        'macro_recall': macro_recall,
-                        'macro_f1': macro_f1
-                        })
+                        'recall_benign':       per_class_recall[0],
+                        'recall_malignant':    per_class_recall[1],
+                        'recall_prob_benign':  per_class_recall[2],
+                        'recall_suspicious':   per_class_recall[3],
+                    })
+
 
                 if phase == 'val':
+                    print("\nPer-class recall:")
+                    for i, cls in enumerate(CLASS_NAMES):
+                        print(f"   {cls:>15}: {per_class_recall[i]:.3f}")
+
                     if epoch_loss < best_val_loss:
                         best_val_loss = epoch_loss
                         no_improvement_epochs = 0  # Reset counter if there’s improvement
