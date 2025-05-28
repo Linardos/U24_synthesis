@@ -9,7 +9,7 @@ data_dir: 'original' #'original' # 'stylegan_256x256', 'vqvae' , 'original'
 synth_data_dir: 'synthetic_guide5.0'
 real_percentage: 1.0 # use 0 for full synthetic, use 0.25, 0.5, 0.75 for mix
 
-num_classes: 4
+num_classes: 3 # we drop probably benign
 
 batch_size: 32
 learning_rate: 0.001
@@ -29,12 +29,12 @@ model_names:
   # - vgg16
   # - vgg19
 k_folds: 5 # 0 is hold out, increase for cross-validation, ideally 5
-seed: 44
+seed: 42
 sanity_check: False
 transform_check: basic # "basic" to just apply data preprocessing
 store_sample_per_epoch: True # to visualize images
-experiment_number: 43
+experiment_number: 47 # 45 for real, 46 for synthetic
 
-experiment_name: dualstratified_confusion_stored
+experiment_name: three_class_pretrainedImagenet_frozenlayers
 # experiment_name: sanity_EMBED_multi_class_CV
 # experiment_name: ThreeDataDM_augmentations

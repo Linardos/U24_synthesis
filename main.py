@@ -176,27 +176,46 @@ unique_labels, label_counts = np.unique(labels, return_counts=True)
 label_names = {
     0: 'Benign',
     1: 'Malignant',
-    2: 'Probably Benign',
-    3: 'Suspicious'
+    2: 'Suspicious'
 }
+CLASS_NAMES = ["Benign", "Malignant", "Suspicious"]
+if config['num_classes'] == 4:
+    CLASS_NAMES.append("Probably Benign")
+    label_names[3] = "Probably Benign"
 label_summary = {label_names[label]: count for label, count in zip(unique_labels, label_counts)}
-CLASS_NAMES = ["Benign", "Malignant", "Probably Benign", "Suspicious"]
 
 print("Dataset Summary:")
 for label, count in label_summary.items():
     print(f"{label}: {count}")
 
-
-
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-models = {name: get_model(name, pretrained=False) for name in model_names}
+models = {name: get_model(name, pretrained=True) for name in model_names}
 
 # Move models to device
 for model in models.values():
     model.to(device)
 
+# Loss with inverse class frequency weights
+class_counts = np.array([label_summary[c] for c in CLASS_NAMES])
+# (Benign, Malignant, Probably Benign, Suspicious)
+
+# inverse-freq weights → more weight for rare classes
+# weights = 1.0 / class_counts
+# weights = weights / weights.sum() * len(class_counts)   # re-scale so avg = 1
+# weight_tensor = torch.tensor(weights, dtype=torch.float32).to(device)
+
+# criterion = nn.CrossEntropyLoss(weight=weight_tensor)
 criterion = nn.CrossEntropyLoss()
-optimizers = {name: torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay) for name, model in models.items()}
+# optimizers = {name: torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay) for name, model in models.items()}
+optimizers = {
+    name: torch.optim.Adam(
+        filter(lambda p: p.requires_grad, model.parameters()),
+        lr=learning_rate,
+        weight_decay=weight_decay
+    )
+    for name, model in models.items()
+}
+
 schedulers = {name: CosineAnnealingLR(optimizer, T_max=num_epochs) for name, optimizer in optimizers.items()}
 # CSV log file path
 csv_log_file = experiment_path / "logs.csv"
@@ -206,9 +225,15 @@ with open(csv_log_file, mode='w', newline='') as csvfile:
     fieldnames = [
         'fold','epoch','phase','model_name',
         'loss','accuracy','AUC','balanced_accuracy',
-        'recall_benign','recall_malignant',
-        'recall_prob_benign','recall_suspicious'
+        'sensitivity_benign','sensitivity_malignant',
+        'sensitivity_suspicious',
+        'specificity_benign','specificity_malignant',
+        'specificity_suspicious'
     ]
+
+    if config['num_classes'] == 4:
+        fieldnames.extend(['sensitivity_prob_benign','specificity_prob_benign'])
+
 
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
@@ -326,35 +351,30 @@ for fold, (train_idx, val_idx) in enumerate(kfold.split(np.zeros(len(strat_key))
                 y_true = np.array(all_labels)
                 y_pred = np.argmax(all_preds, axis=1)
 
-                # ---- NEW: per-class recall --------------------------------------------
                 cm = confusion_matrix(y_true, y_pred, labels=range(len(CLASS_NAMES)))
-                per_class_recall = cm.diagonal() / cm.sum(axis=1)      # vector of length 4
+                tp = np.diag(cm)
+                fp = cm.sum(axis=0) - tp
+                fn = cm.sum(axis=1) - tp
+                tn = cm.sum() - (tp + fp + fn)
 
-                # store the confusion matrix, in case we need another metric after training
+                per_class_sensitivity  = tp / (tp + fn + 1e-12)
+                per_class_specificity  = tn / (tn + fp + 1e-12)
 
-                cm_file = experiment_path / f"cm_fold{fold+1}_epoch{epoch+1}_{phase}.npy"
-                np.save(cm_file, cm)
+                balanced_acc = balanced_accuracy_score(y_true, y_pred)
+                epoch_auc = roc_auc_score(all_labels, all_preds, multi_class='ovr')
+
 
                 # -----------------------------------------------------------------------
 
                 epoch_loss = running_loss / len(data_loader.dataset)
                 epoch_acc = correct_preds.double() / len(data_loader.dataset)
-                if config['num_classes'] > 2:
-                    epoch_auc = roc_auc_score(all_labels, all_preds, multi_class='ovr')
-                    balanced_acc = balanced_accuracy_score(all_labels, np.argmax(all_preds, axis=1))
-                    cm = confusion_matrix(y_true, y_pred, labels=range(len(CLASS_NAMES)))
-                    per_class_recall = cm.diagonal() / cm.sum(axis=1)      # vector of length 4
-                    # -----------------------------------------------------------------------
-                else:
-                    epoch_auc = roc_auc_score(all_labels, all_preds)
-                    
 
 
                 print(f'{model_name} - {phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f} AUC: {epoch_auc:.4f}')
 
                 with open(csv_log_file, mode='a', newline='') as csvfile:
                     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                    writer.writerow({
+                    dict_to_log = {
                         'fold': fold + 1,
                         'epoch': epoch + 1,
                         'phase': phase,
@@ -363,20 +383,31 @@ for fold, (train_idx, val_idx) in enumerate(kfold.split(np.zeros(len(strat_key))
                         'accuracy': epoch_acc.item(),
                         'AUC': epoch_auc,
                         'balanced_accuracy': balanced_acc,
-                        'recall_benign':       per_class_recall[0],
-                        'recall_malignant':    per_class_recall[1],
-                        'recall_prob_benign':  per_class_recall[2],
-                        'recall_suspicious':   per_class_recall[3],
-                    })
+                        'sensitivity_benign':       per_class_sensitivity[0],
+                        'sensitivity_malignant':    per_class_sensitivity[1],
+                        'sensitivity_suspicious':   per_class_sensitivity[2],
+                        'specificity_benign':       per_class_specificity[0],
+                        'specificity_malignant':    per_class_specificity[1],
+                        'specificity_suspicious':  per_class_specificity[2],
+                    }
+
+                    if config['num_classes'] == 4:
+                        dict_to_log ['sensitivity_prob_benign'] = per_class_sensitivity[3]
+                        dict_to_log ['specificity_prob_benign'] = per_class_specificity[3]
+                    writer.writerow(dict_to_log)
 
 
                 if phase == 'val':
-                    print("\nPer-class recall:")
+                    print("\nPer-class sensitivity || specificity:")
                     for i, cls in enumerate(CLASS_NAMES):
-                        print(f"   {cls:>15}: {per_class_recall[i]:.3f}")
+                        print(f"   {cls:>15}: {per_class_sensitivity[i]:.3f} || {per_class_specificity[i]:.3f}")
 
                     if epoch_loss < best_val_loss:
                         best_val_loss = epoch_loss
+                        # store the confusion matrix, in case we need another metric after training
+                        cm_file = experiment_path / f"cm_fold{fold+1}_epoch{epoch+1}_{phase}.npy"
+                        np.save(cm_file, cm)
+
                         no_improvement_epochs = 0  # Reset counter if there’s improvement
                     else:
                         no_improvement_epochs += 1  # Increment counter if no improvement

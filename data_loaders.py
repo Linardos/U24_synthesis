@@ -15,7 +15,8 @@ root_dir = config['root_dir']
 data_dir = config['data_dir']
 full_data_path = os.path.join(root_dir, data_dir)
 
-# if config['num_classes']>2:
+NUM_CLASSES = config.get('num_classes', 4)  
+
 class NiftiDataset(Dataset):
     def __init__(self, full_data_path, transform=None):
         self.full_data_path = full_data_path
@@ -28,9 +29,12 @@ class NiftiDataset(Dataset):
         class_labels = {
             'benign': 0,
             'malignant': 1,
-            'probably_benign': 2,
-            'suspicious': 3
+            'suspicious': 2,
+            # 'probably_benign': 3,
         }
+
+        if NUM_CLASSES == 4:
+            class_labels['probably_benign'] = 3
 
         for class_name, label in class_labels.items():
             class_dir = os.path.join(self.full_data_path, class_name)

@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #  evaluate.py – per-class and overall FID / MS-SSIM on the held-out val split
 # ─────────────────────────────────────────────────────────────────────────────
-import os, csv, random, math, json
+import os, csv, random, math, json, yaml
 from datetime import datetime
 
 import numpy as np
@@ -66,8 +66,14 @@ model = (MonaiDDPM
          .half().to(device).eval())
 
 # ── DATASETS ────────────────────────────────────────────────────────────────
+with open("config_l.yaml") as f:
+    cfg = yaml.safe_load(f)
+
 root_dir   = "/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train/original"
-categories = ["benign", "probably_benign", "suspicious", "malignant"]
+
+categories  = ["benign", "malignant", "suspicious"]
+if config['num_classes'] == 4:
+    categories.append('probably_benign')
 
 real_tf = mt.Compose([
     mt.LoadImaged(keys=["image"], image_only=True),

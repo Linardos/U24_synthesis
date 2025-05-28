@@ -1,128 +1,112 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torchvision import models
 import yaml
 
-# Load the config to get num_classes
+# ── read number of classes from config ──────────────────────────────
 with open('config.yaml', 'r') as f:
     config = yaml.safe_load(f)
-num_classes = config.get('num_classes', 2)  # Default to 2 if not provided
+num_classes = config.get('num_classes', 4)  # Default to 2 if not provided
 
-# Weight initialization function
-def weights_init(m):
-    if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
-        nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-        if m.bias is not None:
-            nn.init.constant_(m.bias, 0)
 
-class SimpleCNN(nn.Module):
-    # for sanity checks, a very very simple architecture.
-    def __init__(self, num_classes=num_classes):
-        super(SimpleCNN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1)  # Input channels adjusted to 1
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2, padding=0)
-        self.fc1 = nn.Linear(32 * 64 * 64, 128)  # Adjust according to your input size
-        self.fc2 = nn.Linear(128, num_classes)
-        self.num_classes = num_classes
+# ── helper: replace first conv with 1-channel version, keep weights ─
+def adapt_first_conv_to_grayscale(cnn: nn.Module) -> nn.Module:
+    if isinstance(cnn, models.ResNet):
+        old = cnn.conv1                               # (64,3,7,7)
+        new = nn.Conv2d(1, old.out_channels,
+                        kernel_size=old.kernel_size,
+                        stride=old.stride,
+                        padding=old.padding,
+                        bias=False)
+        new.weight.data = old.weight.data.mean(dim=1, keepdim=True)
+        cnn.conv1 = new
 
-    def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
-        x = x.view(-1, 32 * 64 * 64)  # Flatten the tensor for the fully connected layer
-        x = F.relu(self.fc1(x))
-        x = self.fc2(x)
-        # if self.num_classes==1:
-        #     return torch.sigmoid(x)
-        # else:
-        return x
+    elif isinstance(cnn, models.DenseNet):
+        old = cnn.features.conv0                      # (64,3,7,7)
+        new = nn.Conv2d(1, old.out_channels,
+                        kernel_size=old.kernel_size,
+                        stride=old.stride,
+                        padding=old.padding,
+                        bias=False)
+        new.weight.data = old.weight.data.mean(dim=1, keepdim=True)
+        cnn.features.conv0 = new
 
+    elif isinstance(cnn, models.EfficientNet):
+        old = cnn.features[0][0]                      # (32,3,3,3)
+        new = nn.Conv2d(1, old.out_channels,
+                        kernel_size=old.kernel_size,
+                        stride=old.stride,
+                        padding=old.padding,
+                        bias=False)
+        new.weight.data = old.weight.data.mean(dim=1, keepdim=True)
+        cnn.features[0][0] = new
+
+    else:
+        raise ValueError("Unsupported backbone for 1-channel adaptation")
+    return cnn
+
+# ── wrapper that replaces the classification head ───────────────────
 class Classifier(nn.Module):
-    def __init__(self, base_model, num_classes=num_classes, dropout_prob=0.5):
-        super(Classifier, self).__init__()
-        self.base_model = base_model
-        self.num_classes = num_classes
-        self.dropout = nn.Dropout(p=dropout_prob)
-        if hasattr(self.base_model, 'fc'):
-            in_features = self.base_model.fc.in_features
-            self.base_model.fc = nn.Linear(in_features, num_classes)
-        elif hasattr(self.base_model, 'classifier'):
-            if isinstance(self.base_model.classifier, nn.Sequential):
-                in_features = self.base_model.classifier[-1].in_features
-                self.base_model.classifier[-1] = nn.Linear(in_features, num_classes)
-            else:
-                in_features = self.base_model.classifier.in_features
-                self.base_model.classifier = nn.Linear(in_features, num_classes)
+    def __init__(self, backbone: nn.Module, num_classes: int, p_drop: float = 0.5):
+        super().__init__()
+        self.backbone = backbone
+        self.dropout = nn.Dropout(p_drop)
+
+        if hasattr(backbone, "fc"):                        # ResNet, EfficientNet
+            in_feat = backbone.fc.in_features
+            backbone.fc = nn.Linear(in_feat, num_classes)
+
+        elif hasattr(backbone, "classifier"):              # DenseNet
+            if isinstance(backbone.classifier, nn.Linear):
+                in_feat = backbone.classifier.in_features
+                backbone.classifier = nn.Linear(in_feat, num_classes)
+            else:                                          # seq head
+                in_feat = backbone.classifier[-1].in_features
+                backbone.classifier[-1] = nn.Linear(in_feat, num_classes)
 
     def forward(self, x):
-        x = self.base_model(x)
-        
-        # if self.num_classes==1:
-        #     return torch.sigmoid(x)
-        # else:
-        return x
+        x = self.backbone(x)
+        return self.dropout(x)
 
-def modify_input_layer(model, input_channels):
-    if isinstance(model, models.ResNet):
-        model.conv1 = nn.Conv2d(input_channels, model.conv1.out_channels, kernel_size=model.conv1.kernel_size, 
-                                stride=model.conv1.stride, padding=model.conv1.padding, bias=(model.conv1.bias is not None))
-    elif isinstance(model, models.DenseNet):
-        model.features.conv0 = nn.Conv2d(input_channels, model.features.conv0.out_channels, kernel_size=model.features.conv0.kernel_size,
-                                         stride=model.features.conv0.stride, padding=model.features.conv0.padding, bias=(model.features.conv0.bias is not None))
-    elif isinstance(model, models.EfficientNet):
-        model.features[0][0] = nn.Conv2d(input_channels, model.features[0][0].out_channels, kernel_size=model.features[0][0].kernel_size,
-                                         stride=model.features[0][0].stride, padding=model.features[0][0].padding, bias=(model.features[0][0].bias is not None))
-    elif isinstance(model, models.VGG):
-        model.features[0] = nn.Conv2d(input_channels, model.features[0].out_channels, kernel_size=model.features[0].kernel_size,
-                                      stride=model.features[0].stride, padding=model.features[0].padding, bias=(model.features[0].bias is not None))
-    elif isinstance(model, models.AlexNet):  # Add handling for AlexNet
-        model.features[0] = nn.Conv2d(input_channels, model.features[0].out_channels, kernel_size=model.features[0].kernel_size,
-                                      stride=model.features[0].stride, padding=model.features[0].padding, bias=(model.features[0].bias is not None))
+# ── model factory ───────────────────────────────────────────────────
+def get_model(model_name: str, num_classes: int = num_classes, pretrained: bool = True):
+    if model_name == "resnet50":
+        weights = models.ResNet50_Weights.IMAGENET1K_V2 if pretrained else None
+        backbone = models.resnet50(weights=weights)
+
+    elif model_name == "resnet101":
+        weights = models.ResNet101_Weights.IMAGENET1K_V2 if pretrained else None
+        backbone = models.resnet101(weights=weights)
+
+    elif model_name == "densenet121":
+        weights = models.DenseNet121_Weights.IMAGENET1K_V1 if pretrained else None
+        backbone = models.densenet121(weights=weights)
+
+    elif model_name == "densenet201":
+        weights = models.DenseNet201_Weights.IMAGENET1K_V1 if pretrained else None
+        backbone = models.densenet201(weights=weights)
+
+    elif model_name == "efficientnet_b0":
+        weights = models.EfficientNet_B0_Weights.IMAGENET1K_V1 if pretrained else None
+        backbone = models.efficientnet_b0(weights=weights)
+
     else:
-        raise ValueError("Unsupported model type for modifying input layer")
-    return model
+        raise ValueError(f"Unsupported backbone: {model_name}")
 
+    # make it 1-channel but keep pretrained kernels
+    backbone = adapt_first_conv_to_grayscale(backbone)
 
-def get_model(model_name, num_classes=num_classes, pretrained=False):
-    if model_name == 'resnet50':
-        base_model = models.resnet50(pretrained=pretrained)
-    elif model_name == 'resnet101':
-        base_model = models.resnet101(pretrained=pretrained)
-    elif model_name == 'alexnet':
-        base_model = models.alexnet(pretrained=pretrained)
-    elif model_name == 'densenet121':
-        base_model = models.densenet121(pretrained=pretrained)
-    elif model_name == 'densenet169':
-        base_model = models.densenet169(pretrained=pretrained)
-    elif model_name == 'densenet201':
-        base_model = models.densenet201(pretrained=pretrained)
-    elif model_name == 'efficientnet_b0':
-        base_model = models.efficientnet_b0(pretrained=pretrained)
-    elif model_name == 'vgg16':
-        base_model = models.vgg16(pretrained=pretrained)
-    elif model_name == 'vgg19':
-        base_model = models.vgg19(pretrained=pretrained)
-    elif model_name == 'simplecnn':  # Add the new case for SimpleCNN
-        base_model = SimpleCNN(num_classes=num_classes)
-    else:
-        raise ValueError(f"Model {model_name} is not supported.")
-    
-    # Modify the input layer to accept 1 channel (if applicable)
-    if model_name not in ["simplecnn"]:
-        base_model = modify_input_layer(base_model, input_channels=1)
-    
-    # Apply custom weight initialization
-    base_model.apply(weights_init)
-    
-    return Classifier(base_model, num_classes)
+    # freeze early layers (optional but useful against over-fitting)
+    for name, p in backbone.named_parameters():
+        if not name.startswith(("layer3", "layer4", "features.6")):
+            p.requires_grad = False
 
+    return Classifier(backbone, num_classes)
+
+# ── sanity check ────────────────────────────────────────────────────
 if __name__ == "__main__":
-    model_names = ['resnet50', 'densenet121', 'densenet201', 'efficientnet_b0', 'vgg16', 'simplecnn']
-    models = {name: get_model(name) for name in model_names}
-
-    # Print model summaries to verify
-    for name, model in models.items():
-        print(f"Model: {name}")
-        print(model)
-        print("="*50)
+    for name in ["resnet50", "densenet121", "densenet201", "efficientnet_b0"]:
+        model = get_model(name)
+        x = torch.randn(2, 1, 224, 224)
+        y = model(x)
+        print(f"{name:12s} output shape:", y.shape)

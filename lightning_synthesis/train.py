@@ -140,7 +140,8 @@ train_transforms = mt.Compose(
     ]
 )
 
-dataset = NiftiSynthesisDataset(full_data_path, transform=train_transforms)
+print(f"Loading data loader with {config['num_classes']} classes")
+dataset = NiftiSynthesisDataset(full_data_path, transform=train_transforms, num_classes=config['num_classes'])
 
 # ------ uncomment this for validaiton split
 # val_frac = 0.1                     # 10 % for validation
@@ -188,11 +189,6 @@ if resume_ckpt:
 else:
     print("🆕  no checkpoint found – starting from scratch")
     model = MonaiDDPM(lr=learning_rate, T=1000)
-
-# if config['conditional']:
-#     model = MonaiDDPM(lr=learning_rate, T=1000)
-# else:
-#     model = MonaiDDPM_unconditional(lr=learning_rate, T=1000)
 
 print(f"Model initialized & EMBED loaded. Initiating experiment {experiment_name}")
 
