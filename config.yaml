@@ -7,7 +7,7 @@ root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train'
 # root_dir: '/mnt/d/Datasets/EMBED/sanity_EMBED'
 data_dir: 'original' #'original' # 'stylegan_256x256', 'vqvae' , 'original'
 synth_data_dir: 'synthetic_guide5.0'
-real_percentage: 1.0 # use 0 for full synthetic, use 0.25, 0.5, 0.75 for mix
+real_percentage: 0.0 # use 0 for full synthetic, use 0.25, 0.5, 0.75 for mix
 
 num_classes: 4 # we drop probably benign
 
@@ -16,7 +16,6 @@ learning_rate: 0.001
 weight_decay: 0.00001
 early_stopping_patience: 20
 num_epochs: 100
-pretrained: False
 val_split: 0.2
 # resize_height: 256
 # resize_width: 256
@@ -29,11 +28,11 @@ model_names:
   # - vgg16
   # - vgg19
 k_folds: 5 # 0 is hold out, increase for cross-validation, ideally 5
-seed: 43
+seed: 42
 sanity_check: False
 transform_check: basic # "basic" to just apply data preprocessing
 store_sample_per_epoch: True # to visualize images
-experiment_number: 48 # 47 is gold, works well 3 classes, real data, 49 is synthetic
+experiment_number: 53 # 47 is gold, works well 3 classes, real data, 49 is synthetic
 
 experiment_name: four_class_pretrainedImagenet_frozenlayers
 # experiment_name: sanity_EMBED_multi_class_CV

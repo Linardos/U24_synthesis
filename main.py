@@ -1,4 +1,4 @@
-import os
+import os, sys
 import shutil, csv, pickle, yaml, json
 import time, re, random
 import torch
@@ -25,6 +25,14 @@ with open('config.yaml', 'r') as f:
     config = yaml.safe_load(f)
 
 # Set random seed for reproducibility
+# pass seed by command line if you want
+if len(sys.argv) > 1:                         # a number was passed
+    try:
+        cli_seed = int(sys.argv[1])
+        config["seed"] = cli_seed             # overwrite config value
+        print(f"[INFO] Using CLI seed {cli_seed}")
+    except ValueError:
+        raise SystemExit("Seed must be an integer, e.g.  python main.py 42")
 random_seed = config['seed']
 np.random.seed(random_seed)
 torch.manual_seed(random_seed)
