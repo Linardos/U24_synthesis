@@ -35,10 +35,10 @@ os.makedirs(SYN_ROOT, exist_ok=True)
 print(f"Running inference for {SYN_ROOT}")
 # --- how many of each label do we want? ------------------------------
 target_counts = {
-    'benign':          4092,
-    'probably_benign': 2728,
-    'suspicious':      2728,
-    'malignant':       1364,
+    'benign':          3444,
+    'probably_benign': 2296,
+    'suspicious':      2296,
+    'malignant':       1148,
 }
 
 # --- integer id mapping you trained with -----------------------------

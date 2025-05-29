@@ -131,41 +131,42 @@ synth_path = os.path.join(root_dir, synth_data_dir)
 print(f"Loading data from:\n  • {real_path}\n  • {synth_path}")
 
 # ------------- choose dataset(s) -------------
-if real_percentage == 1.0:
-    dataset = NiftiDataset(full_data_path=real_path, transform=transform)
-    n_real, n_synth = len(dataset), 0
+# if real_percentage == 1.0:
+#     dataset = NiftiDataset(full_data_path=real_path, transform=transform)
+#     n_real, n_synth = len(dataset), 0
 
-elif real_percentage == 0.0:
-    dataset = NiftiDataset(full_data_path=synth_path, transform=transform)
-    n_real, n_synth = 0, len(dataset)
+# elif real_percentage == 0.0:
+#     dataset = NiftiDataset(full_data_path=synth_path, transform=transform)
+#     n_real, n_synth = 0, len(dataset)
 
-else:
-    real_ds  = NiftiDataset(full_data_path=real_path,  transform=transform)
-    synth_ds = NiftiDataset(full_data_path=synth_path, transform=transform)
+# else:
+#     real_ds  = NiftiDataset(full_data_path=real_path,  transform=transform)
+#     synth_ds = NiftiDataset(full_data_path=synth_path, transform=transform)
 
-    dataset = stratified_real_synth_mix(real_ds, synth_ds,
-                                        real_fraction=real_percentage,
-                                        seed=random_seed)
+#     dataset = stratified_real_synth_mix(real_ds, synth_ds,
+#                                         real_fraction=real_percentage,
+#                                         seed=random_seed)
 
-    # The mix returns ConcatDataset([real_subset, synth_subset])
-    n_real  = len(dataset.datasets[0])
-    n_synth = len(dataset.datasets[1])
+#     # The mix returns ConcatDataset([real_subset, synth_subset])
+#     n_real  = len(dataset.datasets[0])
+#     n_synth = len(dataset.datasets[1])
 
-print(f"Final dataset: {len(dataset)}  (real {n_real}, synth {n_synth})")
+# ---------- get data labels once ----------
+real_ds   = NiftiDataset(real_path,  transform)
+synth_ds  = NiftiDataset(synth_path, transform)
 
-labels = []
-print("Processing for label summary...")
-# for i in tqdm(range(0, len(dataset), 1000)):  # Process in chunks of 1000
-#     start_time = time.time()
-#     labels.extend([dataset[j][1] for j in range(i, min(i + 1000, len(dataset)))])
-#     # print(f'Time for 1000 samples: {time.time() - start_time:.2f} seconds')
-data_loader = DataLoader(dataset, batch_size=1000, num_workers=8, shuffle=False)
-labels = []
-for batch in tqdm(data_loader):
-    labels.extend(batch[1].numpy())  # Assuming labels are the second item in the dataset
-labels = np.array(labels)
+# grab per-sample class ids
+def ds_labels(ds):
+    lab = []
+    for _, y in DataLoader(ds, batch_size=1024, num_workers=8, shuffle=False):
+        lab.extend(y.numpy())
+    return np.asarray(lab)
 
-unique_labels, label_counts = np.unique(labels, return_counts=True)
+real_labels  = ds_labels(real_ds)
+synth_labels = ds_labels(synth_ds)
+
+classes = np.unique(real_labels)
+print(f"Real {len(real_ds)}  |  Synth {len(synth_ds)}")
 
 #--- Binary classification
 
@@ -182,7 +183,8 @@ CLASS_NAMES = ["Benign", "Malignant", "Suspicious"]
 if config['num_classes'] == 4:
     CLASS_NAMES.append("Probably Benign")
     label_names[3] = "Probably Benign"
-label_summary = {label_names[label]: count for label, count in zip(unique_labels, label_counts)}
+unique_labels, label_counts = np.unique(real_labels, return_counts=True)
+label_summary = {label_names[l]: c for l, c in zip(unique_labels, label_counts)}
 
 print("Dataset Summary:")
 for label, count in label_summary.items():
@@ -234,19 +236,18 @@ with open(csv_log_file, mode='w', newline='') as csvfile:
     if config['num_classes'] == 4:
         fieldnames.extend(['sensitivity_prob_benign','specificity_prob_benign'])
 
-
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
 
 # k-Fold cross-validation ------------
 # 0/1 flag for synthetic vs real
-is_synth = np.zeros(len(dataset), dtype=int)
-if isinstance(dataset, ConcatDataset):
-    # ConcatDataset([real_subset, synth_subset])
-    is_synth[len(dataset.datasets[0]):] = 1        # mark synthetic part
+# is_synth = np.zeros(len(dataset), dtype=int)
+# if isinstance(dataset, ConcatDataset):
+#     # ConcatDataset([real_subset, synth_subset])
+#     is_synth[len(dataset.datasets[0]):] = 1        # mark synthetic part
 
-# composite label: class_id * 2 + is_synth
-strat_key = labels * 2 + is_synth                 # values 0..(2*num_classes-1)
+# # composite label: class_id * 2 + is_synth
+# strat_key = labels * 2 + is_synth                 # values 0..(2*num_classes-1)
 
 # stratification logic:
 # | clinical class | real / synth | composite value |
@@ -262,40 +263,64 @@ strat_key = labels * 2 + is_synth                 # values 0..(2*num_classes-1)
 # All real	all 0	labels * 2 → 0, 2, 4, 6…	Only the clinical classes (Benign-real, Malignant-real, …). There are no “synthetic” codes, so folds stay class-balanced exactly as in the ordinary case.
 # All synthetic	all 1	labels * 2 + 1 → 1, 3, 5, 7…	Again you get one unique code per clinical class, just offset by +1. Folds are still class-balanced; the “source” dimension is moot because every sample shares the same source.
 
-kfold = StratifiedKFold(n_splits=k_folds,
-                        shuffle=True,
-                        random_state=random_seed)
-# kfold = KFold(n_splits=k_folds, shuffle=True, random_state=random_seed)
 
-# for fold, (train_indices, val_indices) in enumerate(kfold.split(dataset)):
-    
-for fold, (train_idx, val_idx) in enumerate(kfold.split(np.zeros(len(strat_key)), strat_key)):
-    print(f'Fold {fold + 1}/{k_folds}')
-    print('-' * 10)
+cv = StratifiedKFold(n_splits=k_folds,
+                     shuffle=True, random_state=random_seed)
+for fold, (train_real_idx, val_real_idx) in enumerate(
+        cv.split(np.zeros(len(real_ds)), real_labels)):
 
-    # ------ identify real vs synthetic indices in this fold -------
-    if isinstance(dataset, ConcatDataset):
-        split = len(dataset.datasets[0])
-        real_train   = train_idx[train_idx <  split]
-        synth_train  = train_idx[train_idx >= split]
-        real_val     = val_idx[val_idx <  split]
-        synth_val    = val_idx[val_idx >= split]
-    else:  # pure real or pure synthetic
-        real_train, synth_train = (train_idx, np.array([], int)) if n_real else (np.array([], int), train_idx)
-        real_val,   synth_val   = (val_idx,   np.array([], int)) if n_real else (np.array([], int), val_idx)
+    rng = np.random.default_rng(random_seed + fold)
 
-    idx_info = {
-        "train_real" : real_train.tolist(),
-        "train_synth": synth_train.tolist(),
-        "val_real"   : real_val.tolist(),
-        "val_synth"  : synth_val.tolist(),
+    # ----- build mixed TRAIN subset -------------------------------
+    synth_pool_by_cls = {c: np.where(synth_labels == c)[0] for c in classes}
+
+    chosen_real, chosen_synth = [], []
+    for c in classes:
+        cls_idx = train_real_idx[real_labels[train_real_idx] == c]
+        rng.shuffle(cls_idx)
+
+        n_keep = int(round(len(cls_idx) * real_percentage))   # REAL_FRACTION
+        n_need = len(cls_idx) - n_keep
+
+        chosen_real.extend(cls_idx[:n_keep])
+
+        if n_need and len(synth_pool_by_cls[c]):
+            pick = rng.choice(synth_pool_by_cls[c], size=n_need, replace=False)
+            chosen_synth.extend(pick)
+        elif n_need:
+            print(f"⚠️  class {c}: wanted {n_need} synth but pool empty.")
+
+    train_subset = ConcatDataset([Subset(real_ds,  chosen_real),
+                                  Subset(synth_ds, chosen_synth)])
+    val_subset   = Subset(real_ds, val_real_idx)          # 100 % real
+
+    #  PRINT split summary
+    # print(f"\nFold {fold+1}/{k_folds}  │  "
+    #       f"train  real={len(chosen_real):4d} / synth={len(chosen_synth):4d}   │  "
+    #       f"val real={len(val_real_idx):4d}")
+
+    print(f"Fold {fold+1}/{k_folds} │ "
+      f"train  real={len(chosen_real)} / synth={len(chosen_synth)} "
+      f"({100*len(chosen_real)/(len(chosen_real)+len(chosen_synth)):.1f}% real) │ "
+      f"val real={len(val_real_idx)}")
+
+    # save indices for reproducibility
+    idx_json = {
+        "train_real" : list(map(int, chosen_real)),
+        "train_synth": list(map(int, chosen_synth)),
+        "val_real"   : list(map(int, val_real_idx)),
     }
-    with open(experiment_path / f"indices_fold{fold+1}.json", "w") as f:
-        json.dump(idx_info, f, indent=2)
-    # --------------------------------------------------------------
+    (experiment_path / f"indices_fold{fold+1}.json").write_text(
+        json.dumps(idx_json, indent=2))
 
-    train_subset = Subset(dataset, train_idx)
-    val_subset = Subset(dataset, val_idx)
+    # # --------------------------------------------------------------
+    '''
+    StratifiedKFold keeps each clinical class balanced across the 5 folds;
+    because we do the replacement inside each class after the split, class balance is preserved.
+    '''
+
+    # train_subset = Subset(dataset, train_idx)
+    # val_subset = Subset(dataset, val_idx)
 
     train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)

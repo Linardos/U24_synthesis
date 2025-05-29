@@ -5,7 +5,7 @@ data_dir: 'original'
 # Synthesis-Specific Parameters
 drop_birads_3: True # probably benign is tough to classify
 data_mode: 'embed' # embed
-num_classes: 3
+num_classes: 4
 # resize_dim: 256 # Resize data
 
 # Training Hyperparameters
@@ -14,9 +14,8 @@ learning_rate: 0.00001
 num_epochs: 30  
 
 # Experiment Tracking
-experiment_name: 'DDPM_3loss_3class_quicktest'
+experiment_name: 'DDPM_3loss'
 # experiment_name: '044_DDPM_deeper_128x128' # use suffix and full existing name to continue from checkpoint
 
 # Sanity checks
 fast_dev_run: False
-
