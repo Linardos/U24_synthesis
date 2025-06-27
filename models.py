@@ -6,7 +6,7 @@ import yaml
 # ── read number of classes from config ──────────────────────────────
 with open('config.yaml', 'r') as f:
     config = yaml.safe_load(f)
-num_classes = config.get('num_classes', 4)  # Default to 2 if not provided
+num_classes = config.get('num_classes', 2)  # Default to 2 if not provided
 
 
 # ── helper: replace first conv with 1-channel version, keep weights ─

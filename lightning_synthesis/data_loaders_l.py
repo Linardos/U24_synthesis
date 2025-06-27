@@ -14,7 +14,7 @@ data_dir = config['data_dir']
 full_data_path = os.path.join(root_dir, data_dir)
 
 class NiftiSynthesisDataset(Dataset):
-    def __init__(self, full_data_path, num_classes, transform=None, samples_per_class=None):
+    def __init__(self, full_data_path, transform=None, samples_per_class=None):
         """
         Args:
             full_data_path (str): Path to the root directory of your data.
@@ -25,7 +25,6 @@ class NiftiSynthesisDataset(Dataset):
         self.full_data_path = full_data_path
         self.transform = transform
         self.samples_per_class = samples_per_class
-        self.num_classes = num_classes
         self.samples = self._load_samples()
 
     def _load_samples(self):
@@ -33,17 +32,15 @@ class NiftiSynthesisDataset(Dataset):
         samples_by_label = {
             'benign': [],
             'malignant': [],
+            'probably_benign': [],
             'suspicious': []
         }
         class_labels = {
             'benign': 0,
             'malignant': 1,
-            'suspicious': 2
+            'probably_benign': 2,
+            'suspicious': 3
         }
-
-        if self.num_classes == 4:
-            class_labels['probably_benign'] = 3
-            samples_by_label['probably_benign'] = []
 
         for class_name, label in class_labels.items():
             class_dir = os.path.join(self.full_data_path, class_name)

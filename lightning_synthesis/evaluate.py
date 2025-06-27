@@ -116,12 +116,15 @@ to_rgb = lambda x: x.repeat(1, 3, 1, 1)              # 1-ch → 3-ch
 # ── METRIC HELPERS ──────────────────────────────────────────────────────────
 def metrics_for_scale(scale: int):
     fid_cls, mssim_cls = {}, {}
+    # ── GLOBAL FID (across all classes) ────────────────────────────────
+    fid_global = FID(feature=64, normalize=True).to(device)
 
     for c, label_id in zip(categories, range(len(categories))):
         # ---------- FID ----------
         fid = FID(feature=64, normalize=True).to(device)
         for imgs, _ in val_loaders[c]:
             fid.update(to_rgb(imgs.to(device)), real=True)
+            fid_global.update(to_rgb(imgs.to(device)), real=True)   # global
 
         synth_remaining = N_EVAL
         with torch.no_grad(), torch.autocast("cuda", torch.float16):
@@ -132,6 +135,7 @@ def metrics_for_scale(scale: int):
                     guidance_scale=scale
                 )
                 fid.update(to_rgb(synth.to(device)), real=False)
+                fid_global.update(to_rgb(synth.to(device)), real=False)  # global
                 synth_remaining -= cur
         fid_cls[c] = fid.compute().item()
 
@@ -151,10 +155,12 @@ def metrics_for_scale(scale: int):
         mssim_cls[c] = ms.compute().item()
 
     # overall = mean of the four class scores
-    fid_mean   = sum(fid_cls.values())   / len(fid_cls)
+    fid_mean   = sum(fid_cls.values())   / len(fid_cls)     # ← cFID  (WCFID)
+    fid_g      = fid_global.compute().item()
     mssim_mean = sum(mssim_cls.values()) / len(mssim_cls)
 
-    return fid_cls | {"mean": fid_mean}, mssim_cls | {"mean": mssim_mean}
+    return (fid_cls | {"mean": fid_mean, "global": fid_g},
+        mssim_cls | {"mean": mssim_mean})
 
 # ── SWEEP ──────────────────────────────────────────────────────────────────
 results_fid, results_ms = {}, {}
@@ -170,13 +176,13 @@ ts = datetime.now().strftime("%Y%m%d_%H%M%S")
 os.makedirs("logs", exist_ok=True)
 csv_path = f"logs/{NAME_TAG}_metrics_{ts}.csv"
 
-header = ["Guidance", *[f"FID_{c}" for c in categories+['mean']],
+header = ["Guidance", "FID_global", *[f"FID_{c}" for c in categories+['mean']],
                      *[f"MSSSIM_{c}" for c in categories+['mean']]]
 
 with open(csv_path, "w", newline="") as f:
     w = csv.writer(f); w.writerow(header)
     for gs in SCALES:
-        fid_row = [results_fid[gs][c] for c in categories+['mean']]
+        fid_row = [results_fid[gs]["global"], *[results_fid[gs][c] for c in categories+['mean']]]
         ms_row  = [results_ms [gs][c] for c in categories+['mean']]
         w.writerow([gs, *fid_row, *ms_row])
 

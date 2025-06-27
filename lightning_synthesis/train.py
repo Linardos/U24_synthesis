@@ -60,7 +60,7 @@ else:
     # create a new experiment and copy current set up
     existing = [d for d in base_dir.iterdir() if d.is_dir() and d.name[:3].isdigit()]
     next_num = (max(int(d.name[:3]) for d in existing) + 1) if existing else 1
-    experiment_name = f"{next_num:03d}_{cfg_exp_name}_{resize_dim}x{resize_dim}"
+    experiment_name = f"{next_num:03d}_{cfg_exp_name}"
     experiment_path = base_dir / experiment_name
     experiment_path.mkdir(exist_ok=True)
     
@@ -140,27 +140,7 @@ train_transforms = mt.Compose(
     ]
 )
 
-print(f"Loading data loader with {config['num_classes']} classes")
-dataset = NiftiSynthesisDataset(full_data_path, transform=train_transforms, num_classes=config['num_classes'])
-
-# ------ uncomment this for validaiton split
-# val_frac = 0.1                     # 10 % for validation
-# val_len  = int(len(dataset) * val_frac)
-# train_len = len(dataset) - val_len
-# train_ds, val_ds = torch.utils.data.random_split(dataset, [train_len, val_len],
-#                                 generator=torch.Generator().manual_seed(42))
-
-# train_loader = torch.utils.data.DataLoader(
-#     train_ds, batch_size=batch_size, shuffle=True,
-#     num_workers=8, persistent_workers=True, pin_memory=True
-# )
-# val_loader = torch.utils.data.DataLoader(
-#     val_ds, batch_size=batch_size, shuffle=False,
-#     num_workers=4, persistent_workers=True, pin_memory=True
-# )
-
-
-# ------ comment out for validation split
+dataset = NiftiSynthesisDataset(full_data_path, transform=train_transforms)
 train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, persistent_workers=True, pin_memory=True)
 img_batch, _ = next(iter(train_loader))
 print(img_batch.shape, img_batch.min().item(), img_batch.max().item())
@@ -190,6 +170,11 @@ else:
     print("🆕  no checkpoint found – starting from scratch")
     model = MonaiDDPM(lr=learning_rate, T=1000)
 
+# if config['conditional']:
+#     model = MonaiDDPM(lr=learning_rate, T=1000)
+# else:
+#     model = MonaiDDPM_unconditional(lr=learning_rate, T=1000)
+
 print(f"Model initialized & EMBED loaded. Initiating experiment {experiment_name}")
 
 # ----------------------------------------------------------------------
@@ -208,8 +193,8 @@ checkpoint_callback = ModelCheckpoint(
     mode="min",
 )
 early_stopping = EarlyStopping(
-    monitor="train_loss", #change to val_loss unless you're generating a final model
-    patience=10,
+    monitor="train_loss",
+    patience=15,
     mode="min",
     check_on_train_epoch_end=True,
 )
@@ -231,8 +216,7 @@ trainer = pl.Trainer(
     )
 
 
-trainer.fit(model, train_dataloaders=train_loader) #, validation_loaders=val_loader)
-
+trainer.fit(model, train_dataloaders=train_loader)
 
 print('Training complete!')
 

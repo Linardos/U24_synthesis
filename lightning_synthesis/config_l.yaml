@@ -5,16 +5,16 @@ data_dir: 'original'
 # Synthesis-Specific Parameters
 drop_birads_3: True # probably benign is tough to classify
 data_mode: 'embed' # embed
-num_classes: 4
+num_classes: 2
 # resize_dim: 256 # Resize data
 
 # Training Hyperparameters
-batch_size: 8  # Increased for more stable gradients
+batch_size: 16  # Increased for more stable gradients
 learning_rate: 0.00001
-num_epochs: 30  
+num_epochs: 50  
 
 # Experiment Tracking
-experiment_name: 'DDPM_3loss'
+experiment_name: 'DDPM_3loss_4class_retry'
 # experiment_name: '044_DDPM_deeper_128x128' # use suffix and full existing name to continue from checkpoint
 
 # Sanity checks

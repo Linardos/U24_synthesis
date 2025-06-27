@@ -29,10 +29,12 @@ class NiftiDataset(Dataset):
         class_labels = {
             'benign': 0,
             'malignant': 1,
-            'suspicious': 2,
+            # 'suspicious': 2,
             # 'probably_benign': 3,
         }
 
+        if NUM_CLASSES >= 3:
+            class_labels['suspicious'] = 2
         if NUM_CLASSES == 4:
             class_labels['probably_benign'] = 3
 

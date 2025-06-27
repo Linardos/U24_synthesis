@@ -37,12 +37,7 @@ clinical_df = clinical_df[clinical_cols]
 metadata_df = metadata_df[metadata_cols]
 
 # ─────────────────────────────────────────────────────────────
-# 3a. Clinical-side filter (optional but harmless)
-# ─────────────────────────────────────────────────────────────
-clinical_df = clinical_df[clinical_df["implanfind"].isna()]
-
-# ─────────────────────────────────────────────────────────────
-# 3b. Image-side filter  ➜  drop implant-displaced (“ID”) views
+# 3. Image-side filter  ➜  drop implant-displaced (“ID”) views
 # ─────────────────────────────────────────────────────────────
 metadata_df = metadata_df[
     ~metadata_df["ViewPosition"]

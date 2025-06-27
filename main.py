@@ -176,18 +176,15 @@ synth_labels = ds_labels(synth_ds)
 classes = np.unique(real_labels)
 print(f"Real {len(real_ds)}  |  Synth {len(synth_ds)}")
 
-#--- Binary classification
-
-# label_names = {0: 'Benign', 1: 'Malignant'}
-# label_summary = {label_names[label]: count for label, count in zip(unique_labels, label_counts)}
-
-#--- multi-classification
+#--- classification
 label_names = {
     0: 'Benign',
-    1: 'Malignant',
-    2: 'Suspicious'
+    1: 'Malignant'
 }
-CLASS_NAMES = ["Benign", "Malignant", "Suspicious"]
+CLASS_NAMES = ["Benign", "Malignant"] #, "Suspicious"]
+if config['num_classes'] >=3:
+    CLASS_NAMES.append("Suspicious")
+    label_names[2] = "Suspicious"
 if config['num_classes'] == 4:
     CLASS_NAMES.append("Probably Benign")
     label_names[3] = "Probably Benign"
@@ -236,11 +233,11 @@ with open(csv_log_file, mode='w', newline='') as csvfile:
         'fold','epoch','phase','model_name',
         'loss','accuracy','AUC','balanced_accuracy',
         'sensitivity_benign','sensitivity_malignant',
-        'sensitivity_suspicious',
-        'specificity_benign','specificity_malignant',
-        'specificity_suspicious'
+        'specificity_benign','specificity_malignant'
     ]
 
+    if config['num_classes'] >= 3:
+        fieldnames.extend(['sensitivity_suspicious','specificity_suspicious'])
     if config['num_classes'] == 4:
         fieldnames.extend(['sensitivity_prob_benign','specificity_prob_benign'])
 
@@ -352,7 +349,7 @@ for fold, (train_real_idx, val_real_idx) in enumerate(
                 running_loss = 0.0
                 correct_preds = 0
                 all_labels = []
-                all_preds = []
+                all_probs  = []           # ← continuous scores for AUC
 
                 for inputs, labels in tqdm(data_loader):
                     inputs = inputs.to(device)
@@ -362,7 +359,7 @@ for fold, (train_real_idx, val_real_idx) in enumerate(
                         optimizers[model_name].zero_grad()
 
                     with torch.set_grad_enabled(phase == 'train'):
-                        outputs = model(inputs)
+                        outputs = model(inputs)                      # logits
                         loss = criterion(outputs, labels)
                         _, preds = torch.max(outputs, 1)
 
@@ -372,17 +369,16 @@ for fold, (train_real_idx, val_real_idx) in enumerate(
 
                     running_loss += loss.item() * inputs.size(0)
                     correct_preds += torch.sum(preds == labels.data)
+
                     all_labels.extend(labels.cpu().numpy())
-                    # all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy()[:, 1])
-                    
-                    if config['num_classes'] > 2:
-                        all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy())  # Store all class probabilities
-                    else:
-                        all_preds.extend(outputs.softmax(dim=1).cpu().detach().numpy()[:, 1])
-                        
-                # turn probabilities → class index once, reuse everywhere
-                y_true = np.array(all_labels)
-                y_pred = np.argmax(all_preds, axis=1)
+                    all_probs.extend(torch.softmax(outputs, dim=1).cpu().detach().numpy())
+                    #                     shape (B, num_classes)
+
+                # ------------------------------------------------------------
+                # epoch-level metrics
+                y_true = np.asarray(all_labels)          # (N,)
+                probs  = np.asarray(all_probs)           # (N, C)
+                y_pred = probs.argmax(axis=1)
 
                 cm = confusion_matrix(y_true, y_pred, labels=range(len(CLASS_NAMES)))
                 tp = np.diag(cm)
@@ -390,11 +386,17 @@ for fold, (train_real_idx, val_real_idx) in enumerate(
                 fn = cm.sum(axis=1) - tp
                 tn = cm.sum() - (tp + fp + fn)
 
-                per_class_sensitivity  = tp / (tp + fn + 1e-12)
-                per_class_specificity  = tn / (tn + fp + 1e-12)
+                per_class_sensitivity = tp / (tp + fn + 1e-12)
+                per_class_specificity = tn / (tn + fp + 1e-12)
+                balanced_acc          = balanced_accuracy_score(y_true, y_pred)
 
-                balanced_acc = balanced_accuracy_score(y_true, y_pred)
-                epoch_auc = roc_auc_score(all_labels, all_preds, multi_class='ovr')
+                # ---- AUC -----------------------------------------------------
+                if config['num_classes'] == 2:
+                    # use probability of the positive class (column 1)
+                    epoch_auc = roc_auc_score(y_true, probs[:, 1])
+                else:
+                    epoch_auc = roc_auc_score(y_true, probs, multi_class='ovr')
+
 
 
                 # -----------------------------------------------------------------------
@@ -416,17 +418,21 @@ for fold, (train_real_idx, val_real_idx) in enumerate(
                         'accuracy': epoch_acc.item(),
                         'AUC': epoch_auc,
                         'balanced_accuracy': balanced_acc,
-                        'sensitivity_benign':       per_class_sensitivity[0],
-                        'sensitivity_malignant':    per_class_sensitivity[1],
-                        'sensitivity_suspicious':   per_class_sensitivity[2],
-                        'specificity_benign':       per_class_specificity[0],
-                        'specificity_malignant':    per_class_specificity[1],
-                        'specificity_suspicious':  per_class_specificity[2],
+                        'sensitivity_benign':    per_class_sensitivity[0],
+                        'sensitivity_malignant': per_class_sensitivity[1],
+                        'specificity_benign':    per_class_specificity[0],
+                        'specificity_malignant': per_class_specificity[1],
                     }
-
+                    if config['num_classes'] > 2:
+                        dict_to_log.update({
+                            'sensitivity_suspicious': per_class_sensitivity[2],
+                            'specificity_suspicious': per_class_specificity[2],
+                        })
                     if config['num_classes'] == 4:
-                        dict_to_log ['sensitivity_prob_benign'] = per_class_sensitivity[3]
-                        dict_to_log ['specificity_prob_benign'] = per_class_specificity[3]
+                        dict_to_log.update({
+                            'sensitivity_prob_benign': per_class_sensitivity[3],
+                            'specificity_prob_benign': per_class_specificity[3],
+                        })
                     writer.writerow(dict_to_log)
 
 
