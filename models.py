@@ -4,7 +4,7 @@ from torchvision import models
 import yaml
 
 # ── read number of classes from config ──────────────────────────────
-with open('config.yaml', 'r') as f:
+with open('/home/locolinux2/U24_synthesis/config.yaml', 'r') as f:
     config = yaml.safe_load(f)
 num_classes = config.get('num_classes', 2)  # Default to 2 if not provided
 

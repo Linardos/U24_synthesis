@@ -29,18 +29,21 @@ class NiftiSynthesisDataset(Dataset):
 
     def _load_samples(self):
 
-        samples_by_label = {
-            'benign': [],
-            'malignant': [],
-            'probably_benign': [],
-            'suspicious': []
+        # label order per setting binary, 3-class, 4-class
+        label_sets = {
+            2: ["benign", "malignant"],
+            3: ["benign", "malignant", "suspicious"],
+            4: ["benign", "malignant", "suspicious", "probably_benign"],
         }
-        class_labels = {
-            'benign': 0,
-            'malignant': 1,
-            'probably_benign': 2,
-            'suspicious': 3
-        }
+
+        labels = label_sets.get(config["num_classes"])
+        if labels is None:
+            raise ValueError("num_classes must be 2, 3, or 4")
+
+        samples_by_label = {lbl: []      for lbl in labels}
+        class_labels     = {lbl: idx     for idx, lbl in enumerate(labels)}
+        # ------
+
 
         for class_name, label in class_labels.items():
             class_dir = os.path.join(self.full_data_path, class_name)

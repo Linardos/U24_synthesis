@@ -19,8 +19,7 @@ num_epochs: 100
 val_split: 0.2
 # resize_height: 256
 # resize_width: 256
-model_names:
-  - resnet50
+model_name: resnet50
   # - efficientnet_b0
   # - densenet121
   # # - densenet169
@@ -28,7 +27,7 @@ model_names:
   # - vgg16
   # - vgg19
 k_folds: 5 # 0 is hold out, increase for cross-validation, ideally 5
-seed: 42
+seed: 44
 sanity_check: False
 transform_check: basic # "basic" to just apply data preprocessing
 store_sample_per_epoch: True # to visualize images

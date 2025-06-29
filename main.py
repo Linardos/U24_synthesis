@@ -49,7 +49,7 @@ learning_rate = config['learning_rate']
 weight_decay = config['weight_decay']
 num_epochs = config['num_epochs']
 val_split = config['val_split']
-model_names = config['model_names']
+model_name = config["model_name"]        
 experiment_number = config['experiment_number']
 experiment_name = config['experiment_name']
 k_folds = config['k_folds']
@@ -80,7 +80,7 @@ base_dir.mkdir(exist_ok=True)
 next_tag = f"{experiment_number:03d}"                   # zero-pad to 3 digits
 
 # 4) compose the folder name and create it
-experiment_folder = f"{next_tag}_{model_names[0]}_{experiment_name}_seed{random_seed}_real_perc{real_percentage}"
+experiment_folder = f"{next_tag}_{model_name}_{experiment_name}_seed{random_seed}_real_perc{real_percentage}"
 experiment_path   = base_dir / experiment_folder
 experiment_path.mkdir(exist_ok=False)          # error if duplicate
 
@@ -196,11 +196,8 @@ for label, count in label_summary.items():
     print(f"{label}: {count}")
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-models = {name: get_model(name, pretrained=True) for name in model_names}
-
-# Move models to device
-for model in models.values():
-    model.to(device)
+# -------- model choice ----------------------------
+model      = get_model(model_name, pretrained=True).to(device)
 
 # Loss with inverse class frequency weights
 class_counts = np.array([label_summary[c] for c in CLASS_NAMES])
@@ -213,17 +210,11 @@ class_counts = np.array([label_summary[c] for c in CLASS_NAMES])
 
 # criterion = nn.CrossEntropyLoss(weight=weight_tensor)
 criterion = nn.CrossEntropyLoss()
-# optimizers = {name: torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay) for name, model in models.items()}
-optimizers = {
-    name: torch.optim.Adam(
-        filter(lambda p: p.requires_grad, model.parameters()),
-        lr=learning_rate,
-        weight_decay=weight_decay
-    )
-    for name, model in models.items()
-}
+optimizer  = torch.optim.Adam(
+                filter(lambda p: p.requires_grad, model.parameters()),
+                lr=learning_rate, weight_decay=weight_decay)
+scheduler  = CosineAnnealingLR(optimizer, T_max=num_epochs)
 
-schedulers = {name: CosineAnnealingLR(optimizer, T_max=num_epochs) for name, optimizer in optimizers.items()}
 # CSV log file path
 csv_log_file = experiment_path / "logs.csv"
 
@@ -330,129 +321,153 @@ for fold, (train_real_idx, val_real_idx) in enumerate(
     train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)
 
-    best_val_loss = float('inf')
+    ckpt_dir = experiment_path / "checkpoints"
+    ckpt_dir.mkdir(exist_ok=True)
+    best_val_auc         = -float("inf")   
+    best_val_loss        =  float("inf")   
+    early_stop_metric    = "auc"           # or "loss"
+    min_delta_auc        = 0.002
     no_improvement_epochs = 0
+
 
     # Training and evaluation loop
     for epoch in range(num_epochs):
         print(f'Epoch {epoch + 1}/{num_epochs}')
 
         for phase in ['train', 'val']:
-            for model_name, model in models.items():
+            if phase == 'train':
+                model.train()
+                data_loader = train_loader
+            else:
+                model.eval()
+                data_loader = val_loader
+
+            running_loss = 0.0
+            correct_preds = 0
+            all_labels = []
+            all_probs  = []           # ← continuous scores for AUC
+
+            for inputs, labels in tqdm(data_loader):
+                inputs = inputs.to(device)
+                labels = labels.to(device)
+
                 if phase == 'train':
-                    model.train()
-                    data_loader = train_loader
-                else:
-                    model.eval()
-                    data_loader = val_loader
+                    optimizer.zero_grad()
 
-                running_loss = 0.0
-                correct_preds = 0
-                all_labels = []
-                all_probs  = []           # ← continuous scores for AUC
-
-                for inputs, labels in tqdm(data_loader):
-                    inputs = inputs.to(device)
-                    labels = labels.to(device)
+                with torch.set_grad_enabled(phase == 'train'):
+                    outputs = model(inputs)                      # logits
+                    loss = criterion(outputs, labels)
+                    _, preds = torch.max(outputs, 1)
 
                     if phase == 'train':
-                        optimizers[model_name].zero_grad()
+                        loss.backward()
+                        optimizer.step()
 
-                    with torch.set_grad_enabled(phase == 'train'):
-                        outputs = model(inputs)                      # logits
-                        loss = criterion(outputs, labels)
-                        _, preds = torch.max(outputs, 1)
+                running_loss += loss.item() * inputs.size(0)
+                correct_preds += torch.sum(preds == labels.data)
 
-                        if phase == 'train':
-                            loss.backward()
-                            optimizers[model_name].step()
+                all_labels.extend(labels.cpu().numpy())
+                all_probs.extend(torch.softmax(outputs, dim=1).cpu().detach().numpy())
+                #                     shape (B, num_classes)
 
-                    running_loss += loss.item() * inputs.size(0)
-                    correct_preds += torch.sum(preds == labels.data)
+            # ------------------------------------------------------------
+            # epoch-level metrics
+            y_true = np.asarray(all_labels)          # (N,)
+            probs  = np.asarray(all_probs)           # (N, C)
+            y_pred = probs.argmax(axis=1)
 
-                    all_labels.extend(labels.cpu().numpy())
-                    all_probs.extend(torch.softmax(outputs, dim=1).cpu().detach().numpy())
-                    #                     shape (B, num_classes)
+            cm = confusion_matrix(y_true, y_pred, labels=range(len(CLASS_NAMES)))
+            tp = np.diag(cm)
+            fp = cm.sum(axis=0) - tp
+            fn = cm.sum(axis=1) - tp
+            tn = cm.sum() - (tp + fp + fn)
 
-                # ------------------------------------------------------------
-                # epoch-level metrics
-                y_true = np.asarray(all_labels)          # (N,)
-                probs  = np.asarray(all_probs)           # (N, C)
-                y_pred = probs.argmax(axis=1)
+            per_class_sensitivity = tp / (tp + fn + 1e-12)
+            per_class_specificity = tn / (tn + fp + 1e-12)
+            balanced_acc          = balanced_accuracy_score(y_true, y_pred)
 
-                cm = confusion_matrix(y_true, y_pred, labels=range(len(CLASS_NAMES)))
-                tp = np.diag(cm)
-                fp = cm.sum(axis=0) - tp
-                fn = cm.sum(axis=1) - tp
-                tn = cm.sum() - (tp + fp + fn)
-
-                per_class_sensitivity = tp / (tp + fn + 1e-12)
-                per_class_specificity = tn / (tn + fp + 1e-12)
-                balanced_acc          = balanced_accuracy_score(y_true, y_pred)
-
-                # ---- AUC -----------------------------------------------------
-                if config['num_classes'] == 2:
-                    # use probability of the positive class (column 1)
-                    epoch_auc = roc_auc_score(y_true, probs[:, 1])
-                else:
-                    epoch_auc = roc_auc_score(y_true, probs, multi_class='ovr')
+            # ---- AUC -----------------------------------------------------
+            if config['num_classes'] == 2:
+                # use probability of the positive class (column 1)
+                epoch_auc = roc_auc_score(y_true, probs[:, 1])
+            else:
+                epoch_auc = roc_auc_score(y_true, probs, multi_class='ovr')
 
 
 
-                # -----------------------------------------------------------------------
+            # -----------------------------------------------------------------------
 
-                epoch_loss = running_loss / len(data_loader.dataset)
-                epoch_acc = correct_preds.double() / len(data_loader.dataset)
-
-
-                print(f'{model_name} - {phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f} AUC: {epoch_auc:.4f}')
-
-                with open(csv_log_file, mode='a', newline='') as csvfile:
-                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-                    dict_to_log = {
-                        'fold': fold + 1,
-                        'epoch': epoch + 1,
-                        'phase': phase,
-                        'model_name': model_name,
-                        'loss': epoch_loss,
-                        'accuracy': epoch_acc.item(),
-                        'AUC': epoch_auc,
-                        'balanced_accuracy': balanced_acc,
-                        'sensitivity_benign':    per_class_sensitivity[0],
-                        'sensitivity_malignant': per_class_sensitivity[1],
-                        'specificity_benign':    per_class_specificity[0],
-                        'specificity_malignant': per_class_specificity[1],
-                    }
-                    if config['num_classes'] > 2:
-                        dict_to_log.update({
-                            'sensitivity_suspicious': per_class_sensitivity[2],
-                            'specificity_suspicious': per_class_specificity[2],
-                        })
-                    if config['num_classes'] == 4:
-                        dict_to_log.update({
-                            'sensitivity_prob_benign': per_class_sensitivity[3],
-                            'specificity_prob_benign': per_class_specificity[3],
-                        })
-                    writer.writerow(dict_to_log)
+            epoch_loss = running_loss / len(data_loader.dataset)
+            epoch_acc = correct_preds.double() / len(data_loader.dataset)
 
 
-                if phase == 'val':
-                    print("\nPer-class sensitivity || specificity:")
-                    for i, cls in enumerate(CLASS_NAMES):
-                        print(f"   {cls:>15}: {per_class_sensitivity[i]:.3f} || {per_class_specificity[i]:.3f}")
+            print(f'{model_name} - {phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f} AUC: {epoch_auc:.4f}')
 
-                    if epoch_loss < best_val_loss:
+            with open(csv_log_file, mode='a', newline='') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                dict_to_log = {
+                    'fold': fold + 1,
+                    'epoch': epoch + 1,
+                    'phase': phase,
+                    'model_name': model_name,
+                    'loss': epoch_loss,
+                    'accuracy': epoch_acc.item(),
+                    'AUC': epoch_auc,
+                    'balanced_accuracy': balanced_acc,
+                    'sensitivity_benign':    per_class_sensitivity[0],
+                    'sensitivity_malignant': per_class_sensitivity[1],
+                    'specificity_benign':    per_class_specificity[0],
+                    'specificity_malignant': per_class_specificity[1],
+                }
+                if config['num_classes'] > 2:
+                    dict_to_log.update({
+                        'sensitivity_suspicious': per_class_sensitivity[2],
+                        'specificity_suspicious': per_class_specificity[2],
+                    })
+                if config['num_classes'] == 4:
+                    dict_to_log.update({
+                        'sensitivity_prob_benign': per_class_sensitivity[3],
+                        'specificity_prob_benign': per_class_specificity[3],
+                    })
+                writer.writerow(dict_to_log)
+
+
+            if phase == 'val':
+                print("\nPer-class sensitivity || specificity:")
+                for i, cls in enumerate(CLASS_NAMES):
+                    print(f"   {cls:>15}: {per_class_sensitivity[i]:.3f} || {per_class_specificity[i]:.3f}")
+
+                improved = False
+                if early_stop_metric == "auc":
+                    if epoch_auc > best_val_auc + min_delta_auc:
+                        best_val_auc = epoch_auc
+                        improved = True
+                else:  # loss
+                    if epoch_loss < best_val_loss - 1e-4:
                         best_val_loss = epoch_loss
-                        # store the confusion matrix, in case we need another metric after training
-                        cm_file = experiment_path / f"cm_fold{fold+1}_epoch{epoch+1}_{phase}.npy"
-                        np.save(cm_file, cm)
+                        improved = True
 
-                        no_improvement_epochs = 0  # Reset counter if there’s improvement
-                    else:
-                        no_improvement_epochs += 1  # Increment counter if no improvement
+                if improved:
+                    cm_file = experiment_path / f"cm_fold{fold+1}_epoch{epoch+1}_{phase}.npy"
+                    np.save(cm_file, cm)
+
+                    torch.save(
+                        {
+                            "epoch": epoch + 1,
+                            "model_state_dict": model.state_dict(),
+                            "optimizer_state_dict": optimizer.state_dict(),
+                            "val_loss": epoch_loss,
+                            "seed": random_seed,
+                        },
+                        ckpt_dir / f"best_{model_name}_fold{fold+1}.pt"
+                    )
+                    print(f"✓ saved new best checkpoint (loss {epoch_loss:.4f})")
+                    no_improvement_epochs = 0
+                else:
+                    no_improvement_epochs += 1
+
                     
-        for scheduler in schedulers.values():
-            scheduler.step()
+        scheduler.step()
 
         if no_improvement_epochs >= early_stopping_patience:
             print(f"Early stopping triggered. No improvement for {early_stopping_patience} epochs.")

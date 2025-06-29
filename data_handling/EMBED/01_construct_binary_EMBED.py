@@ -23,7 +23,7 @@ birads_map = {
     "N": "benign",
     "B": "benign",
     # "P": "probably_benign",
-    "S": "malignant",
+    # "S": "malignant",
     "M": "malignant",
     "K": "malignant",
 }
