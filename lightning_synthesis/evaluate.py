@@ -25,9 +25,18 @@ if str(ROOT_DIR) not in sys.path:                # idempotent
 from models import get_model # classification models
 from torchvision.transforms import Normalize               # oracle preprocessing
 
-ORACLE_CKPT = ("/home/locolinux2/U24_synthesis/experiments/"
-               "055_resnet50_binary_classification_seed44_real_perc1.0/"
-               "checkpoints/best_resnet50_fold5.pt")
+with open("config_l.yaml") as f:
+    config = yaml.safe_load(f)
+
+if config["num_classes"] == 2:
+    ORACLE_CKPT = ("/home/locolinux2/U24_synthesis/experiments/"
+                "055_resnet50_binary_classification_seed44_real_perc1.0/"
+                "checkpoints/best_resnet50_fold5.pt")
+elif config["num_classes"] == 4:
+    ORACLE_CKPT = ("/home/locolinux2/U24_synthesis/experiments/"
+                "048_resnet50_four_class_pretrainedImagenet_frozenlayers_seed44_real_perc1.0/"
+                "checkpoints/best_resnet50_fold5.pt")
+               
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 # CKPT_PATH  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/049_cDDPM_depth5_fixedScaling_256x256/checkpoints/epoch=22-step=7843.ckpt" # FID = 8.18 at guidance scale 3
@@ -36,19 +45,52 @@ CKPT_PATH  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/054
 CKPT_PATH  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/057_DDPM_seed2025_cropped_256x256/checkpoints/epoch=04-step=1435.ckpt"
 CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/063_DDPM_contrast-aug-20percent_256x256/checkpoints/epoch=04-step=1435.ckpt"
 CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/092_DDPM_MS-SSIM_10perc_HF_5perc_256x256/checkpoints/epoch=18-step=2736.ckpt" # GOLD
-CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/106_DDPM_3loss_4class_retry/checkpoints/epoch=18-step=2736.ckpt"
-
+# CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/106_DDPM_3loss_binary_try/checkpoints/epoch=18-step=2736.ckpt" # functional binary
+CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/107_DDPM_3loss_4class_retry/checkpoints/epoch=17-step=3456.ckpt"
+CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/113_DDPM_binary_epochwise_balanced/checkpoints/epoch=30-step=1116.ckpt" # dynamic epoch-wise data balancing 
 
 """
+experiment 113 # binary, balanced epoch-wise
+--
+experiment 106 # binary
+--
+experiment 107 # 4 class
+
 GS @ 0
-FID   : {'benign': '1.07', 'malignant': '1.23', 'mean': '1.15', 'global': '1.03'}
+FID : {'benign': '0.80', 'malignant': '1.04', 'mean': '0.92', 'global': '0.82', 'bcfid': '0.01'}
+Oracle ACC : {'benign': '0.670', 'malignant': '0.230', 'mean': '0.450'}
+--
+FID : {'benign': '0.66', 'malignant': '1.01', 'probably_benign': '0.47', 'suspicious': '0.67', 'mean': '0.70', 'global': '0.60', 'bcfid': '0.04'}
+Oracle ACC : {'benign': '0.250', 'malignant': '0.050', 'probably_benign': '0.490', 'suspicious': '0.230', 'mean': '0.255'}
 
 GS @ 4
-FID   : {'benign': '1.34', 'malignant': '0.86', 'mean': '1.10', 'global': '0.96'}
+FID : {'benign': '1.03', 'malignant': '0.71', 'mean': '0.87', 'global': '0.78', 'bcfid': '0.19'}
+Oracle ACC : {'benign': '0.720', 'malignant': '0.280', 'mean': '0.500'}
+--
+GS @ 5
+FID : {'benign': '1.05', 'malignant': '0.89', 'probably_benign': '0.95', 'suspicious': '1.28', 'mean': '1.04', 'global': '0.89', 'bcfid': '0.21'}
+Oracle ACC : {'benign': '0.180', 'malignant': '0.100', 'probably_benign': '0.370', 'suspicious': '0.350', 'mean': '0.250'}
 
 GS @ 7
-FID   : {'benign': '1.36', 'malignant': '0.58', 'mean': '0.97', 'global': '0.69'}
+FID : {'benign': '1.30', 'malignant': '0.73', 'mean': '1.02', 'global': '0.75', 'bcfid': '0.65'}
+Oracle ACC : {'benign': '0.810', 'malignant': '0.510', 'mean': '0.660'}
+--
+FID : {'benign': '1.04', 'malignant': '1.20', 'probably_benign': '1.87', 'suspicious': '2.24', 'mean': '1.59', 'global': '1.31', 'bcfid': '0.44'}
+Oracle ACC : {'benign': '0.140', 'malignant': '0.180', 'probably_benign': '0.430', 'suspicious': '0.490', 'mean': '0.310'}
 
+GS @ 8
+FID : {'benign': '1.13', 'malignant': '0.91', 'mean': '1.02', 'global': '0.73', 'bcfid': '0.67'}
+Oracle ACC : {'benign': '0.840', 'malignant': '0.600', 'mean': '0.720'}
+--
+FID : {'benign': '1.20', 'malignant': '1.44', 'probably_benign': '1.83', 'suspicious': '2.11', 'mean': '1.64', 'global': '1.46', 'bcfid': '0.30'}
+Oracle ACC : {'benign': '0.220', 'malignant': '0.120', 'probably_benign': '0.360', 'suspicious': '0.530', 'mean': '0.307'}
+
+GS @ 9
+FID : {'benign': '1.74', 'malignant': '1.06', 'mean': '1.40', 'global': '0.96', 'bcfid': '1.05'}
+Oracle ACC : {'benign': '0.780', 'malignant': '0.600', 'mean': '0.690'}
+--
+FID : {'benign': '0.70', 'malignant': '1.56', 'probably_benign': '2.40', 'suspicious': '2.53', 'mean': '1.80', 'global': '1.46', 'bcfid': '0.49'}
+Oracle ACC : {'benign': '0.280', 'malignant': '0.140', 'probably_benign': '0.350', 'suspicious': '0.560', 'mean': '0.333'}
 """
 
 # CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/094_DDPM_MS-SSIM_10perc_HF_5perc_val/checkpoints/epoch=12-step=1690.ckpt" # ACTUAL GOLD
@@ -58,15 +100,13 @@ NAME_TAG = "003_10percMS-SSIM_5percHF_thebest"
 
 RESOLUTION = 256
 BATCH      = 16
-N_EVAL     = 100                       # samples / class
-SCALES     = [0, 4, 7, 8, 9]
+N_EVAL     = 200                       # samples / class
+SCALES     = [0, 4, 5, 6, 7, 8]
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch.manual_seed(42); random.seed(42); np.random.seed(42)
 
 # ── DATASET ───────────────────────────────────────────────────────────────────
-with open("config_l.yaml") as f:
-    config = yaml.safe_load(f)
 
 root_dir = "/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train/original"
 

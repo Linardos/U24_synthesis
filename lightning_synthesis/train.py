@@ -6,6 +6,8 @@ import numpy as np
 from pathlib import Path
 import glob
 import time
+from collections import defaultdict
+import random
 
 import pytorch_lightning as pl
 from pytorch_lightning import loggers as pl_loggers
@@ -13,7 +15,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping, Learning
 import torch
 from monai import transforms as mt
 
-from data_loaders_l import NiftiSynthesisDataset
+from data_loaders_l import NiftiSynthesisDataset, BalancedSamplingDataModule
 from model_architectures import UNet, MonaiDDPM
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
@@ -140,10 +142,28 @@ train_transforms = mt.Compose(
     ]
 )
 
-dataset = NiftiSynthesisDataset(full_data_path, transform=train_transforms)
-train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, persistent_workers=True, pin_memory=True)
-img_batch, _ = next(iter(train_loader))
+
+if config['dynamic_balanced_sampling']: # ASSURE EQUAL CLASS NUMBER PER EPOCH. This way the synthetic model is not biased toward a benign prior
+    train_loader = BalancedSamplingDataModule(
+        full_data_path=full_data_path,
+        batch_size=batch_size,
+        transform=train_transforms,
+        num_workers=8,
+    )
+else:
+    dataset = NiftiSynthesisDataset(full_data_path, transform=train_transforms, samples_per_class=config['samples_per_class'])
+    train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, persistent_workers=True, pin_memory=True)
+
+if isinstance(train_loader, pl.LightningDataModule):
+    # Initialise pools (once) then pull a loader
+    train_loader.setup("fit")
+    sample_loader = train_loader.train_dataloader()
+else:
+    sample_loader = train_loader
+
+img_batch, _ = next(iter(sample_loader))
 print(img_batch.shape, img_batch.min().item(), img_batch.max().item())
+
 
 
 # ----------------------------------------------------------------------
@@ -194,7 +214,7 @@ checkpoint_callback = ModelCheckpoint(
 )
 early_stopping = EarlyStopping(
     monitor="train_loss",
-    patience=15,
+    patience=5,
     mode="min",
     check_on_train_epoch_end=True,
 )
@@ -203,6 +223,7 @@ lr_monitor = LearningRateMonitor(logging_interval='epoch')
 # Set up Trainer
 trainer = pl.Trainer(
     fast_dev_run=config['fast_dev_run'],
+    reload_dataloaders_every_n_epochs=1, # for balancing per-epoch
     max_epochs=num_epochs,
     accelerator="auto",
     precision=16,

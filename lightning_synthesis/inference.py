@@ -9,7 +9,7 @@ torch.manual_seed(2025)   # reproducible noise
 
 RESOLUTION = 256
 BATCH = 32       # keep RAM/VRAM sane; adjust to your GPU
-GUIDE_SCALE = 5.0
+GUIDE_SCALE = 8.0
 T = 1_000     
 
 # ckpt_path = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/049_cDDPM_depth5_fixedScaling_256x256/checkpoints/epoch=22-step=7843.ckpt"

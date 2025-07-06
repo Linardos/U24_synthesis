@@ -17,8 +17,8 @@ DST_ROOT = Path("/mnt/d/Datasets/EMBED/EMBED_clean_256x256_binary")
 
 MAP_4_TO_2 = {
     "benign":           "benign",
-    "probably_benign":  "benign",
-    "suspicious":       "malignant",
+    # "probably_benign":  "benign",
+    # "suspicious":       "malignant",
     "malignant":        "malignant",
 }
 SPLITS = ["train/original", "test"]          # add more if you have them

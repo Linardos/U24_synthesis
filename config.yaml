@@ -3,10 +3,11 @@
 # root_dir: '/mnt/d/Datasets/SanityCMMD_train'
 # root_dir: '/mnt/d/Datasets/SanityDDSM_train'
 # root_dir: '/mnt/d/Datasets/SanityInBreast_train'
-root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train'
+# root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train'
 # root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_256x256_binary/train'
+root_dir: '/mnt/d/Datasets/EMBED/EMBED_binary_12vs56_256x256/train'
 data_dir: 'original' #'original' # 'stylegan_256x256', 'vqvae' , 'original'
-synth_data_dir: 'synthetic_guide5.0'
+synth_data_dir: 'synthetic_guide8.0'
 real_percentage: 1.0 # use 0 for full synthetic, use 0.25, 0.5, 0.75 for mix
 
 num_classes: 2 #
@@ -31,8 +32,9 @@ seed: 44
 sanity_check: False
 transform_check: basic # "basic" to just apply data preprocessing
 store_sample_per_epoch: True # to visualize images
-experiment_number: 55 #60 # 48-53 we test four class. 55 to 60 we test binary, last experiment  full synthetic in each case (53 and 60)
+experiment_number: 62 # 62 onward is 12 vs 56
+# --------60 # 48-53 we test four class. 55 to 60 we test binary, last experiment  full synthetic in each case (53 and 60)
 
-experiment_name: binary_classification # four_class_pretrainedImagenet_frozenlayers #binary_classification #
+experiment_name: binary_12vs56 # four_class_pretrainedImagenet_frozenlayers #binary_classification #
 # experiment_name: sanity_EMBED_multi_class_CV
 # experiment_name: ThreeDataDM_augmentations

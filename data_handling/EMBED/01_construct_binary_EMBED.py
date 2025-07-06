@@ -12,7 +12,7 @@ from nibabel import Nifti1Image
 from sklearn.model_selection import train_test_split
 from scipy.ndimage import zoom
 
-RESIZE_DIM = 512
+RESIZE_DIM = 256
 # ------------------------------------------------------------
 # 0.  Load metadata  ▸ map BI-RADS codes → four categories
 # ------------------------------------------------------------
@@ -87,7 +87,7 @@ _show_split("TEST",  test)
 # 3.  Folder layout
 # ------------------------------------------------------------
 base_dir   = "/mnt/d/Datasets/EMBED/images/"
-output_dir = f"/mnt/d/Datasets/EMBED/EMBED_binary_{RESIZE_DIM}x{RESIZE_DIM}"
+output_dir = f"/mnt/d/Datasets/EMBED/EMBED_binary_12vs56_{RESIZE_DIM}x{RESIZE_DIM}"
 categories = list(desired_counts.keys())
 
 for split in ["train", "test"]:

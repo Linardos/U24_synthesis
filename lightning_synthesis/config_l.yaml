@@ -9,12 +9,16 @@ num_classes: 2
 # resize_dim: 256 # Resize data
 
 # Training Hyperparameters
-batch_size: 12  # Increased for more stable gradients
+batch_size: 16  # Increased for more stable gradients
 learning_rate: 0.00001
 num_epochs: 50  
+samples_per_class: 1722 # None for 4 class, ignored if dynamic_balanced_sampling is True // Note that Malignant = 1148. Sample twice or thrice that.
+dynamic_balanced_sampling: True
+## Benign: 3444
+## Malignant: 1148
 
 # Experiment Tracking
-experiment_name: 'DDPM_3loss_binary_retry'
+experiment_name: 'DDPM_binary_epochwise_balanced'
 # experiment_name: '044_DDPM_deeper_128x128' # use suffix and full existing name to continue from checkpoint
 
 # Sanity checks

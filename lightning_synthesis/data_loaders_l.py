@@ -1,9 +1,11 @@
-import os
-import torch
-from torch.utils.data import Dataset, DataLoader
+import os, random
 import yaml
+from collections import defaultdict
+from pathlib import Path
+import torch
+from torch.utils.data import DataLoader, Dataset
 import pytorch_lightning as pl
-
+from monai import transforms as mt
 # Load configuration
 with open('config_l.yaml', 'r') as f:
     config = yaml.safe_load(f)
@@ -13,6 +15,92 @@ root_dir = config['root_dir']
 data_dir = config['data_dir']
 full_data_path = os.path.join(root_dir, data_dir)
 
+# ── NEW: LightningDataModule that re-samples benign each epoch ───────────────
+class BasicSynthesisDataset(Dataset):
+    def __init__(self, samples, transform=None):
+        self.samples   = samples
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        file_path, label = self.samples[idx]
+        sample = {"image": file_path, "class": label}
+        if self.transform:
+            sample = self.transform(sample)
+        return sample["image"], sample["class"]
+
+class BalancedSamplingDataModule(pl.LightningDataModule):
+    """
+    • Loads *all* malignant (.nii.gz) paths once.
+    • Keeps a pool of *all* benign paths.
+    • On every call to `train_dataloader` it draws a fresh benign subset the
+      same size as malignant, merges, shuffles, and returns a DataLoader.
+
+    Set `reload_dataloaders_every_n_epochs=1` in the Trainer so Lightning
+    will call `train_dataloader()` at the start of every epoch.
+    """
+
+    def __init__(
+        self,
+        full_data_path: str,
+        batch_size: int,
+        transform=None,
+        num_workers: int = 8,
+    ):
+        super().__init__()
+        self.full_data_path = Path(full_data_path)
+        self.batch_size     = batch_size
+        self.transform      = transform
+        self.num_workers    = num_workers
+
+        self.benign_pool       = []  # list[(path, 0)]
+        self.malignant_samples = []  # list[(path, 1)]
+
+    # ── called once on every rank before training ────────────────────────────
+    def setup(self, stage):
+        all_samples_by_label = defaultdict(list)
+        for class_name in ["benign", "malignant"]:
+            class_dir = self.full_data_path / class_name
+            if not class_dir.exists():
+                continue
+            label = 0 if class_name == "benign" else 1
+            for subdir in class_dir.iterdir():
+                nii_files = [f for f in subdir.iterdir() if f.suffix == ".gz"]
+                if nii_files:
+                    all_samples_by_label[class_name].append((str(nii_files[0]), label))
+
+        self.malignant_samples = all_samples_by_label["malignant"]
+        self.benign_pool       = all_samples_by_label["benign"]
+
+        if len(self.malignant_samples) == 0:
+            raise RuntimeError("No malignant samples found!")
+        if len(self.benign_pool) < len(self.malignant_samples):
+            raise RuntimeError("Benign pool smaller than malignant pool!")
+
+    # ── helper that re-samples benign & builds a dataset ─────────────────────
+    def _make_dataset(self):
+        benign_subset = random.sample(
+            self.benign_pool, k=len(self.malignant_samples)
+        )
+        balanced_samples = benign_subset + self.malignant_samples
+        random.shuffle(balanced_samples)
+        return BasicSynthesisDataset(balanced_samples, transform=self.transform)
+
+    # ── Lightning hooks ──────────────────────────────────────────────────────
+    def train_dataloader(self):
+        dataset = self._make_dataset()
+        return DataLoader(
+            dataset,
+            batch_size=self.batch_size,
+            shuffle=True,               # already shuffled, but this mixes batches
+            num_workers=self.num_workers,
+            pin_memory=True,
+            persistent_workers=False,   # new DataLoader each epoch → keep False
+        )
+
+# Original one used:
 class NiftiSynthesisDataset(Dataset):
     def __init__(self, full_data_path, transform=None, samples_per_class=None):
         """
@@ -61,16 +149,19 @@ class NiftiSynthesisDataset(Dataset):
                     print(f"No .nii.gz file found in {subdir_path}")
 
         # If the user requested a fixed number per class, enforce that
-        if self.samples_per_class is not None:
+        if self.samples_per_class:
             fixed_samples = []
             for class_name, sample_list in samples_by_label.items():
                 if len(sample_list) < self.samples_per_class:
-                    raise ValueError(f"Not enough samples for class '{class_name}'. "
-                                     f"Required {self.samples_per_class}, but found {len(sample_list)}.")
-                # For determinism, we sort and take the first N.
-                # (Alternatively, you can randomize with a fixed seed.)
-                sample_list = sorted(sample_list)[:self.samples_per_class]
-                fixed_samples.extend(sample_list)
+                    print(f"Not enough samples for class '{class_name}'. "
+                                     f"Requested {self.samples_per_class}, but found {len(sample_list)}, which is the sample number to be used")
+                    sample_list = sorted(sample_list)[:len(sample_list)]
+                    fixed_samples.extend(sample_list)
+                else:
+                    # For determinism, we sort and take the first N.
+                    # (Alternatively, you can randomize with a fixed seed.)
+                    sample_list = sorted(sample_list)[:self.samples_per_class]
+                    fixed_samples.extend(sample_list)
             return fixed_samples
         else:
             # Otherwise, return all samples from all classes.

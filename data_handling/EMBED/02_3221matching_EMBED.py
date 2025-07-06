@@ -23,8 +23,8 @@ def downsample_3221_inplace(source_base_dir, malignant_num, *, dry_run=False, se
 
     targets = {
         "benign":          3 * malignant_num,
-        "probably_benign": 2 * malignant_num,
-        "suspicious":      2 * malignant_num,
+        # "probably_benign": 2 * malignant_num,
+        # "suspicious":      2 * malignant_num,
         "malignant":       None,                  # keep all
     }
 
@@ -59,13 +59,16 @@ def downsample_3221_inplace(source_base_dir, malignant_num, *, dry_run=False, se
 # ------------------------------------------------------------------
 # Example usage
 # ------------------------------------------------------------------
-RESIZE_DIM = 512
-EMBED_ds = f"EMBED_clean_{RESIZE_DIM}x{RESIZE_DIM}"
+RESIZE_DIM = 256
+# EMBED_ds = f"EMBED_clean_{RESIZE_DIM}x{RESIZE_DIM}"
+EMBED_ds = f"EMBED_binary_12vs56_{RESIZE_DIM}x{RESIZE_DIM}"
 
 # TRAIN split
 train_dir = f"/mnt/d/Datasets/EMBED/{EMBED_ds}/train/original"
-downsample_3221_inplace(train_dir, malignant_num=1148, dry_run=False)
+# downsample_3221_inplace(train_dir, malignant_num=1148, dry_run=False) # if birads 5 is excluded
+downsample_3221_inplace(train_dir, malignant_num=1838, dry_run=False)
 
 # TEST split
 test_dir  = f"/mnt/d/Datasets/EMBED/{EMBED_ds}/test"
-downsample_3221_inplace(test_dir,  malignant_num=324,  dry_run=False)
+# downsample_3221_inplace(test_dir,  malignant_num=324,  dry_run=False) # if birads 5 is excluded
+downsample_3221_inplace(test_dir,  malignant_num=565,  dry_run=False)

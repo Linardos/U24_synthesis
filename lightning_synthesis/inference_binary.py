@@ -8,11 +8,12 @@ device = "cuda:0" #if torch.cuda.is_available() else "cpu"
 torch.manual_seed(2025)   # reproducible noise
 
 RESOLUTION = 256
-BATCH = 32       # keep RAM/VRAM sane; adjust to your GPU
-GUIDE_SCALE = 5.0
+BATCH = 16       # keep RAM/VRAM sane; adjust to your GPU
+GUIDE_SCALE = 8.0
 T = 1_000     
 
 ckpt_path = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/099_DDPM_3loss_binary_FalsexFalse/checkpoints/epoch=12-step=3731.ckpt"
+ckpt_path = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/106_DDPM_3loss_binary_try/checkpoints/epoch=18-step=2736.ckpt"
 
 model = (MonaiDDPM
          .load_from_checkpoint(ckpt_path, map_location="cpu")   # keep GPU free
@@ -22,18 +23,19 @@ model = (MonaiDDPM
 
 # --- where to put the synthetic data ---------------------------------
 # ---------------------------------------------------------------------
-if "contrast" in ckpt_path:
-    SYN_ROOT = f"/mnt/d/Datasets/EMBED/EMBED_clean_256x256_binary/train/synthetic_guide{GUIDE_SCALE}_contrast-enhanced"
-else:
-    SYN_ROOT = f"/mnt/d/Datasets/EMBED/EMBED_clean_256x256_binary/train/synthetic_guide{GUIDE_SCALE}"
+SYN_ROOT = f"/mnt/d/Datasets/EMBED/EMBED_clean_256x256_binary/train/synthetic_guide{GUIDE_SCALE}"
 
 os.makedirs(SYN_ROOT, exist_ok=True)
 
 print(f"Running inference for {SYN_ROOT}")
 # --- how many of each label do we want? ------------------------------
+# target_counts = {
+#     'benign':          5740,
+#     'malignant':       3444,
+# }
 target_counts = {
-    'benign':          5740,
-    'malignant':       3444,
+    'benign':          3444,
+    'malignant':       1148,
 }
 
 # --- integer id mapping you trained with -----------------------------
