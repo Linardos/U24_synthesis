@@ -149,10 +149,13 @@ if config['dynamic_balanced_sampling']: # ASSURE EQUAL CLASS NUMBER PER EPOCH. T
         batch_size=batch_size,
         transform=train_transforms,
         num_workers=8,
+        ratio=config.get("benign_to_malignant_ratio", 1.0),
     )
+    reload_dataloaders_every_n_epochs = 1
 else:
     dataset = NiftiSynthesisDataset(full_data_path, transform=train_transforms, samples_per_class=config['samples_per_class'])
     train_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8, persistent_workers=True, pin_memory=True)
+    reload_dataloaders_every_n_epochs = 0
 
 if isinstance(train_loader, pl.LightningDataModule):
     # Initialise pools (once) then pull a loader
@@ -223,7 +226,7 @@ lr_monitor = LearningRateMonitor(logging_interval='epoch')
 # Set up Trainer
 trainer = pl.Trainer(
     fast_dev_run=config['fast_dev_run'],
-    reload_dataloaders_every_n_epochs=1, # for balancing per-epoch
+    reload_dataloaders_every_n_epochs=reload_dataloaders_every_n_epochs, # for balancing per-epoch
     max_epochs=num_epochs,
     accelerator="auto",
     precision=16,

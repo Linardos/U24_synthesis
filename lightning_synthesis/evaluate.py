@@ -30,8 +30,11 @@ with open("config_l.yaml") as f:
 
 if config["num_classes"] == 2:
     ORACLE_CKPT = ("/home/locolinux2/U24_synthesis/experiments/"
-                "055_resnet50_binary_classification_seed44_real_perc1.0/"
-                "checkpoints/best_resnet50_fold5.pt")
+                "062_resnet50_binary_12vs56_seed44_real_perc1.0/"
+                "checkpoints/best_resnet50_fold3.pt")
+    # ORACLE_CKPT = ("/home/locolinux2/U24_synthesis/experiments/"
+    #             "055_resnet50_binary_classification_seed44_real_perc1.0/"
+    #             "checkpoints/best_resnet50_fold5.pt")
 elif config["num_classes"] == 4:
     ORACLE_CKPT = ("/home/locolinux2/U24_synthesis/experiments/"
                 "048_resnet50_four_class_pretrainedImagenet_frozenlayers_seed44_real_perc1.0/"
@@ -48,15 +51,27 @@ CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/092_
 # CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/106_DDPM_3loss_binary_try/checkpoints/epoch=18-step=2736.ckpt" # functional binary
 CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/107_DDPM_3loss_4class_retry/checkpoints/epoch=17-step=3456.ckpt"
 CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/113_DDPM_binary_epochwise_balanced/checkpoints/epoch=30-step=1116.ckpt" # dynamic epoch-wise data balancing 
-
+CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/114_DDPM_binary_epochwise_balanced_12vs56/checkpoints/epoch=22-step=1771.ckpt" # more data
+CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/120_DDPM_binary_21perepoch_12vs56/checkpoints/epoch=19-step=1740.ckpt" # seems decent! Even guidance scale 4 gets 70% accuracy.
+CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/121_DDPM_binary_21matching_12vs56/checkpoints/epoch=20-step=1827.ckpt" #  just to check how epoch-wise sampling affects things
 """
-experiment 113 # binary, balanced epoch-wise
+experiment 121 # binary, 2:1 fixed matching, 12 vs 56
+--
+experiment 120 # binary, 2:1 epoch-wise, 12 vs 56
+--
+experiment 113 # binary, 1:1 (balanced) epoch-wise, 12 vs 6
 --
 experiment 106 # binary
 --
 experiment 107 # 4 class
 
 GS @ 0
+FID : {'benign': '1.41', 'malignant': '1.44', 'mean': '1.42', 'global': '1.38', 'bcfid': '0.01'}
+Oracle ACC : {'benign': '0.860', 'malignant': '0.250', 'mean': '0.555'}
+--
+FID : {'benign': '2.57', 'malignant': '2.85', 'mean': '2.71', 'global': '2.64', 'bcfid': '0.00'}
+Oracle ACC : {'benign': '0.240', 'malignant': '0.665', 'mean': '0.453'}
+--
 FID : {'benign': '0.80', 'malignant': '1.04', 'mean': '0.92', 'global': '0.82', 'bcfid': '0.01'}
 Oracle ACC : {'benign': '0.670', 'malignant': '0.230', 'mean': '0.450'}
 --
@@ -64,14 +79,26 @@ FID : {'benign': '0.66', 'malignant': '1.01', 'probably_benign': '0.47', 'suspic
 Oracle ACC : {'benign': '0.250', 'malignant': '0.050', 'probably_benign': '0.490', 'suspicious': '0.230', 'mean': '0.255'}
 
 GS @ 4
+FID : {'benign': '1.66', 'malignant': '2.16', 'mean': '1.91', 'global': '1.84', 'bcfid': '0.12'}
+Oracle ACC : {'benign': '0.750', 'malignant': '0.650', 'mean': '0.700'}
+--
+FID : {'benign': '2.58', 'malignant': '3.64', 'mean': '3.11', 'global': '2.98', 'bcfid': '0.03'}
+Oracle ACC : {'benign': '0.235', 'malignant': '0.860', 'mean': '0.547'}
+--
 FID : {'benign': '1.03', 'malignant': '0.71', 'mean': '0.87', 'global': '0.78', 'bcfid': '0.19'}
 Oracle ACC : {'benign': '0.720', 'malignant': '0.280', 'mean': '0.500'}
 --
-GS @ 5
 FID : {'benign': '1.05', 'malignant': '0.89', 'probably_benign': '0.95', 'suspicious': '1.28', 'mean': '1.04', 'global': '0.89', 'bcfid': '0.21'}
 Oracle ACC : {'benign': '0.180', 'malignant': '0.100', 'probably_benign': '0.370', 'suspicious': '0.350', 'mean': '0.250'}
 
+
 GS @ 7
+FID : {'benign': '1.54', 'malignant': '2.91', 'mean': '2.23', 'global': '1.96', 'bcfid': '0.44'}
+Oracle ACC : {'benign': '0.510', 'malignant': '0.920', 'mean': '0.715'}
+--
+FID : {'benign': '2.94', 'malignant': '3.47', 'mean': '3.20', 'global': '3.14', 'bcfid': '0.06'}
+Oracle ACC : {'benign': '0.190', 'malignant': '0.960', 'mean': '0.575'}
+--
 FID : {'benign': '1.30', 'malignant': '0.73', 'mean': '1.02', 'global': '0.75', 'bcfid': '0.65'}
 Oracle ACC : {'benign': '0.810', 'malignant': '0.510', 'mean': '0.660'}
 --
@@ -79,6 +106,12 @@ FID : {'benign': '1.04', 'malignant': '1.20', 'probably_benign': '1.87', 'suspic
 Oracle ACC : {'benign': '0.140', 'malignant': '0.180', 'probably_benign': '0.430', 'suspicious': '0.490', 'mean': '0.310'}
 
 GS @ 8
+FID : {'benign': '1.68', 'malignant': '3.16', 'mean': '2.42', 'global': '2.11', 'bcfid': '0.49'}
+Oracle ACC : {'benign': '0.360', 'malignant': '0.910', 'mean': '0.635'}
+--
+FID : {'benign': '3.11', 'malignant': '3.42', 'mean': '3.27', 'global': '3.22', 'bcfid': '0.06'}
+Oracle ACC : {'benign': '0.230', 'malignant': '0.970', 'mean': '0.600'}
+--
 FID : {'benign': '1.13', 'malignant': '0.91', 'mean': '1.02', 'global': '0.73', 'bcfid': '0.67'}
 Oracle ACC : {'benign': '0.840', 'malignant': '0.600', 'mean': '0.720'}
 --
@@ -86,6 +119,8 @@ FID : {'benign': '1.20', 'malignant': '1.44', 'probably_benign': '1.83', 'suspic
 Oracle ACC : {'benign': '0.220', 'malignant': '0.120', 'probably_benign': '0.360', 'suspicious': '0.530', 'mean': '0.307'}
 
 GS @ 9
+--
+--
 FID : {'benign': '1.74', 'malignant': '1.06', 'mean': '1.40', 'global': '0.96', 'bcfid': '1.05'}
 Oracle ACC : {'benign': '0.780', 'malignant': '0.600', 'mean': '0.690'}
 --
@@ -99,9 +134,9 @@ print(f"Evaluating {CKPT_PATH}")
 NAME_TAG = "003_10percMS-SSIM_5percHF_thebest"
 
 RESOLUTION = 256
-BATCH      = 16
-N_EVAL     = 200                       # samples / class
-SCALES     = [0, 4, 5, 6, 7, 8]
+BATCH      = 4
+N_EVAL     = 100                       # samples / class
+SCALES     = [7, 8, 0, 4]
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch.manual_seed(42); random.seed(42); np.random.seed(42)

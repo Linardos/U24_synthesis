@@ -33,10 +33,15 @@ print(f"Running inference for {SYN_ROOT}")
 #     'benign':          5740,
 #     'malignant':       3444,
 # }
+# target_counts = {
+#     'benign':          3444,
+#     'malignant':       1148,
+# }
 target_counts = {
-    'benign':          3444,
-    'malignant':       1148,
+    'benign':          5514,
+    'malignant':       1838,
 }
+
 
 # --- integer id mapping you trained with -----------------------------
 class_labels = {
