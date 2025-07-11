@@ -7,11 +7,11 @@ data_dir: 'original'
 drop_birads_3: True # probably benign is tough to classify
 data_mode: 'embed' # embed
 num_classes: 2
-# resize_dim: 256 # Resize data
+model: DDPM # GAN or DDPM
+augmentations: geometric # geometric or all or None
 
 # Training Hyperparameters
-model: GAN # GAN or DDPM
-batch_size: 8  # Increased for more stable gradients, use 16 if also running evaluate.py otherwise 24
+batch_size: 16  # Increased for more stable gradients, use 16 if also running evaluate.py otherwise 24
 learning_rate: 0.00001
 num_epochs: 50  
 samples_per_class: 3676 # ignored if dynamic_balanced_sampling is True // Note that Malignant = 1148, or 1838 if both 5 and 6. Sample twice or thrice that.

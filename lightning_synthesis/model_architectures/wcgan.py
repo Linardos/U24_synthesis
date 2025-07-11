@@ -8,12 +8,12 @@ class ResBlockG(nn.Module):
     """Generator residual block with conditional BN."""
     def __init__(self, in_ch, out_ch, emb_dim):
         super().__init__()
-        self.bn1 = nn.BatchNorm2d(in_ch, affine=False)
+        self.bn1 = nn.BatchNorm2d(in_ch)
         self.gn1 = nn.Linear(emb_dim, in_ch)           # γ
         self.gb1 = nn.Linear(emb_dim, in_ch)           # β
         self.conv1 = nn.Conv2d(in_ch, out_ch, 3, 1, 1)
 
-        self.bn2 = nn.BatchNorm2d(out_ch, affine=False)
+        self.bn2 = nn.BatchNorm2d(out_ch)
         self.gn2 = nn.Linear(emb_dim, out_ch)
         self.gb2 = nn.Linear(emb_dim, out_ch)
         self.conv2 = nn.Conv2d(out_ch, out_ch, 3, 1, 1)
@@ -107,8 +107,8 @@ class ConditionalWGAN(pl.LightningModule):
       • GP λ:           grad_penalty_weight
       • opt betas:      (0.0, 0.9) as recommended by Gulrajani et al.
     """
-    def __init__(self, n_classes, z_dim=128, lr=2e-4, n_critic=5,
-                 grad_penalty_weight=10.0):
+    def __init__(self, n_classes, z_dim=128, lr=2e-4, n_critic=2,
+                 grad_penalty_weight=50.0):
         super().__init__()
         self.save_hyperparameters()
         self.G = Generator(z_dim, emb_dim=128, n_classes=n_classes)
@@ -116,12 +116,20 @@ class ConditionalWGAN(pl.LightningModule):
 
         self.automatic_optimization = False        # manual opt loop
         torch.autograd.set_detect_anomaly(True)
+        for m in self.modules():
+            if isinstance(m, (nn.Conv2d, nn.Linear)):
+                if hasattr(m, 'weight') and m.weight is not None:
+                    nn.init.orthogonal_(m.weight, gain=0.8)
+                if hasattr(m, 'bias') and m.bias is not None:
+                    nn.init.constant_(m.bias, 0.0)
+
+
 
     # --------------------------- utils ------------------------------
     def _gradient_penalty(self, real, fake, labels):
         with torch.autocast(device_type="cuda", enabled=False):
-            ε = torch.rand(real.size(0), 1, 1, 1, device=self.device)
-            interp = ε * real + (1 - ε) * fake
+            eps = torch.rand_like(real)          # ← same dtype & device as real
+            interp = eps * real + (1 - eps) * fake
             interp.requires_grad_(True)
 
             interp_logits = self.D(interp, labels)
@@ -130,8 +138,10 @@ class ConditionalWGAN(pl.LightningModule):
                 grad_outputs=torch.ones_like(interp_logits),
                 create_graph=True, retain_graph=True, only_inputs=True
             )[0]
-            gp = (grad.view(grad.size(0), -1).norm(2, dim=1) - 1).pow(2).mean()
+
+            gp = (grad.flatten(1).norm(2, dim=1) - 1).pow(2).mean()
         return gp
+
 
     # --------------------------- training ---------------------------
     def training_step(self, batch, batch_idx):
@@ -154,9 +164,16 @@ class ConditionalWGAN(pl.LightningModule):
             self.manual_backward(d_loss)
             opt_d.step()
 
-        self.log_dict({"d_loss": d_loss, "gp": gp,
-                       "wasserstein": (d_real - d_fake)},
-                      prog_bar=True, on_step=True)
+            self.log_dict(
+                {
+                    "d_loss": d_loss,
+                    "gp_raw": gp,
+                    "gp_w":   gp * self.hparams.grad_penalty_weight,
+                    "wasserstein": d_real - d_fake,
+                },
+                prog_bar=True,
+                on_step=True,
+            )
 
         # ------------------------------------------------------------
         # 2. Train generator G (1 step)
@@ -186,5 +203,5 @@ class ConditionalWGAN(pl.LightningModule):
         opt_g = torch.optim.Adam(self.G.parameters(),
                                  lr=self.hparams.lr, betas=(0.0, 0.9))
         opt_d = torch.optim.Adam(self.D.parameters(),
-                                 lr=self.hparams.lr, betas=(0.0, 0.9))
+                                 lr=0.5*self.hparams.lr, betas=(0.0, 0.9))
         return [opt_g, opt_d], []     # no schedulers

@@ -62,7 +62,7 @@ else:
     # create a new experiment and copy current set up
     existing = [d for d in base_dir.iterdir() if d.is_dir() and d.name[:3].isdigit()]
     next_num = (max(int(d.name[:3]) for d in existing) + 1) if existing else 1
-    experiment_name = f"{next_num:03d}_{config['model']}_{cfg_exp_name}"
+    experiment_name = f"{next_num:03d}_{config['model']}_augmentations{config['augmentations']}_{cfg_exp_name}"
     experiment_path = base_dir / experiment_name
     experiment_path.mkdir(exist_ok=True)
     
@@ -125,10 +125,10 @@ transform_list =     [
         #                        prob=0.20, num_control_points=6),
 
         # normalize
-        mt.Lambdad(keys=["image"],
-                   func=lambda img: (img - img.mean()) / (img.std() + 1e-8)),
-        mt.ScaleIntensityd(keys=["image"], minv=-1.0, maxv=1.0), # scale to [-1,1]. Diffusion Models do better if centered on a 0 mean
-        mt.ToTensord(keys=["image"]),
+        # mt.Lambdad(keys=["image"],
+        #            func=lambda img: (img - img.mean()) / (img.std() + 1e-8)),
+        # mt.ScaleIntensityd(keys=["image"], minv=-1.0, maxv=1.0), # scale to [-1,1]. Diffusion Models do better if centered on a 0 mean
+        # mt.ToTensord(keys=["image"]),
 
         # conditionality stuff, applied to labels
         # mt.RandLambdad(keys=["class"], prob=0.15, func=lambda x: -1 * torch.ones_like(x)),
@@ -139,6 +139,44 @@ transform_list =     [
         #     else torch.as_tensor(x, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
         # )
     ]
+
+geometric_augmentations = [
+    mt.RandAffined(
+        keys=["image"],
+        prob=0.9,
+        rotate_range=[0, 0, np.pi / 12],   # ±15°
+        shear_range=[0.1, 0.1],            # up to 10 %
+        translate_range=[0.05, 0.05],      # ±5 %
+        scale_range=[0.05, 0.05],          # ±5 %
+        mode="bilinear",
+        padding_mode="zeros",
+        allow_missing_keys=False,
+    ),
+    mt.RandFlipd(keys=["image"], prob=0.5, spatial_axis=1),
+]
+
+intensity_augmentations = [
+    # ---------------- intensity -----------------
+    mt.RandAdjustContrastd(keys=["image"], prob=0.5, gamma=(0.9, 1.1)),
+    mt.RandGaussianNoised(keys=["image"], prob=0.3, mean=0.0,
+                          std=(0.0, 0.02)),                  # subtle noise
+]
+
+if config['augmentations']=='geometric':
+    transform_list.extend(geometric_augmentations)
+elif config['augmentations']=='all':
+    transform_list.extend(geometric_augmentations)
+    transform_list.extend(intensity_augmentations)
+else:
+    pass
+
+# normalise AFTER all augs
+transform_list.extend([
+    mt.Lambdad(keys=["image"],
+               func=lambda img: (img - img.mean()) / (img.std() + 1e-8)),
+    mt.ScaleIntensityd(keys=["image"], minv=-1.0, maxv=1.0),
+    mt.ToTensord(keys=["image"]),
+])
 
 if config["model"] == "GAN":
     transform_list.extend([

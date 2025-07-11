@@ -42,20 +42,23 @@ elif config["num_classes"] == 4:
                
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
-# CKPT_PATH  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/049_cDDPM_depth5_fixedScaling_256x256/checkpoints/epoch=22-step=7843.ckpt" # FID = 8.18 at guidance scale 3
-CKPT_PATH  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/053_DDPM__DataArtifactsRemoved___256x256/checkpoints/epoch=04-step=1435.ckpt"
-CKPT_PATH  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/054_DDPM_default512_256x256/checkpoints/epoch=04-step=1435.ckpt" # FID @ GS 0: 7.38
-CKPT_PATH  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/057_DDPM_seed2025_cropped_256x256/checkpoints/epoch=04-step=1435.ckpt"
-CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/063_DDPM_contrast-aug-20percent_256x256/checkpoints/epoch=04-step=1435.ckpt"
-CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/092_DDPM_MS-SSIM_10perc_HF_5perc_256x256/checkpoints/epoch=18-step=2736.ckpt" # GOLD
-# CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/106_DDPM_3loss_binary_try/checkpoints/epoch=18-step=2736.ckpt" # functional binary
-CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/107_DDPM_3loss_4class_retry/checkpoints/epoch=17-step=3456.ckpt"
-CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/113_DDPM_binary_epochwise_balanced/checkpoints/epoch=30-step=1116.ckpt" # dynamic epoch-wise data balancing 
-CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/114_DDPM_binary_epochwise_balanced_12vs56/checkpoints/epoch=22-step=1771.ckpt" # more data
-CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/121_DDPM_binary_21fixedmatching_12vs56/checkpoints/epoch=20-step=1827.ckpt" #  just to check how epoch-wise sampling affects things
-CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/120_DDPM_binary_21perepoch_12vs56/checkpoints/epoch=19-step=1740.ckpt" # seems decent! Even guidance scale 4 gets 70% accuracy.
-CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/123_DDPM_binary_11_5perepoch_12vs56/checkpoints/epoch=20-step=1512.ckpt" # 
-CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/124_DDPM_binary_11perepoch_12vs56/checkpoints/epoch=26-step=1566.ckpt"
+
+root = Path("/home/locolinux2/U24_synthesis/lightning_synthesis/experiments")
+# ckpt  = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/049_cDDPM_depth5_fixedScaling_256x256/checkpoints/epoch=22-step=7843.ckpt" # FID = 8.18 at guidance scale 3
+ckpt  = "053_DDPM__DataArtifactsRemoved___256x256/checkpoints/epoch=04-step=1435.ckpt"
+ckpt  = "054_DDPM_default512_256x256/checkpoints/epoch=04-step=1435.ckpt" # FID @ GS 0: 7.38
+ckpt  = "057_DDPM_seed2025_cropped_256x256/checkpoints/epoch=04-step=1435.ckpt"
+ckpt = "063_DDPM_contrast-aug-20percent_256x256/checkpoints/epoch=04-step=1435.ckpt"
+ckpt = "092_DDPM_MS-SSIM_10perc_HF_5perc_256x256/checkpoints/epoch=18-step=2736.ckpt" # GOLD
+# ckpt = "106_DDPM_3loss_binary_try/checkpoints/epoch=18-step=2736.ckpt" # functional binary
+ckpt = "107_DDPM_3loss_4class_retry/checkpoints/epoch=17-step=3456.ckpt"
+ckpt = "113_DDPM_binary_epochwise_balanced/checkpoints/epoch=30-step=1116.ckpt" # dynamic epoch-wise data balancing 
+ckpt = "114_DDPM_binary_epochwise_balanced_12vs56/checkpoints/epoch=22-step=1771.ckpt" # more data
+ckpt = "121_DDPM_binary_21fixedmatching_12vs56/checkpoints/epoch=20-step=1827.ckpt" #  just to check how epoch-wise sampling affects things
+ckpt = "120_DDPM_binary_21perepoch_12vs56/checkpoints/epoch=19-step=1740.ckpt" # seems decent! Even guidance scale 4 gets 70% accuracy.
+ckpt = "123_DDPM_binary_11_5perepoch_12vs56/checkpoints/epoch=20-step=1512.ckpt" # 
+ckpt = "124_DDPM_binary_11perepoch_12vs56/checkpoints/epoch=26-step=1566.ckpt"
+CKPT_PATH = root / ckpt
 """
 experiment 123 # binary, 1:1 epoch-wise, 12 vs 56
 --
@@ -170,7 +173,7 @@ Oracle ACC : {'benign': '0.280', 'malignant': '0.140', 'probably_benign': '0.350
 # CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/094_DDPM_MS-SSIM_10perc_HF_5perc_val/checkpoints/epoch=12-step=1690.ckpt" # ACTUAL GOLD
 
 print(f"Evaluating {CKPT_PATH}")
-NAME_TAG = "003_10percMS-SSIM_5percHF_thebest"
+NAME_TAG = f"{ckpt[:4]}"
 
 RESOLUTION = 256
 BATCH      = 8
