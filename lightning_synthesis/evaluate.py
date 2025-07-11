@@ -52,11 +52,13 @@ CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/092_
 CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/107_DDPM_3loss_4class_retry/checkpoints/epoch=17-step=3456.ckpt"
 CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/113_DDPM_binary_epochwise_balanced/checkpoints/epoch=30-step=1116.ckpt" # dynamic epoch-wise data balancing 
 CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/114_DDPM_binary_epochwise_balanced_12vs56/checkpoints/epoch=22-step=1771.ckpt" # more data
-CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/120_DDPM_binary_21perepoch_12vs56/checkpoints/epoch=19-step=1740.ckpt" # seems decent! Even guidance scale 4 gets 70% accuracy.
 CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/121_DDPM_binary_21fixedmatching_12vs56/checkpoints/epoch=20-step=1827.ckpt" #  just to check how epoch-wise sampling affects things
+CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/120_DDPM_binary_21perepoch_12vs56/checkpoints/epoch=19-step=1740.ckpt" # seems decent! Even guidance scale 4 gets 70% accuracy.
 CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/123_DDPM_binary_11_5perepoch_12vs56/checkpoints/epoch=20-step=1512.ckpt" # 
-
+CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/124_DDPM_binary_11perepoch_12vs56/checkpoints/epoch=26-step=1566.ckpt"
 """
+experiment 123 # binary, 1:1 epoch-wise, 12 vs 56
+--
 experiment 123 # binary, 1.5:1 epoch-wise, 12 vs 56
 --
 experiment 121 # binary, 2:1 fixed matching, 12 vs 56
@@ -70,6 +72,8 @@ experiment 106 # binary
 experiment 107 # 4 class
 
 GS @ 0
+
+--
 FID : {'benign': '0.78', 'malignant': '1.13', 'mean': '0.96', 'global': '0.85', 'bcfid': '0.01'}
 Oracle ACC : {'benign': '0.690', 'malignant': '0.330', 'mean': '0.510'}
 --
@@ -89,6 +93,8 @@ FID : {'benign': '0.66', 'malignant': '1.01', 'probably_benign': '0.47', 'suspic
 Oracle ACC : {'benign': '0.250', 'malignant': '0.050', 'probably_benign': '0.490', 'suspicious': '0.230', 'mean': '0.255'}
 
 GS @ 4
+
+--
 FID : {'benign': '1.41', 'malignant': '0.54', 'mean': '0.97', 'global': '0.47', 'bcfid': '2.01'}
 Oracle ACC : {'benign': '0.770', 'malignant': '0.540', 'mean': '0.655'}
 --
@@ -109,6 +115,8 @@ Oracle ACC : {'benign': '0.180', 'malignant': '0.100', 'probably_benign': '0.370
 
 
 GS @ 7
+
+--
 FID : {'benign': '2.04', 'malignant': '1.20', 'mean': '1.62', 'global': '0.83', 'bcfid': '3.47'}
 Oracle ACC : {'benign': '0.670', 'malignant': '0.840', 'mean': '0.755'}
 --
@@ -128,6 +136,8 @@ FID : {'benign': '1.04', 'malignant': '1.20', 'probably_benign': '1.87', 'suspic
 Oracle ACC : {'benign': '0.140', 'malignant': '0.180', 'probably_benign': '0.430', 'suspicious': '0.490', 'mean': '0.310'}
 
 GS @ 8
+
+--
 FID : {'benign': '2.63', 'malignant': '1.50', 'mean': '2.06', 'global': '1.15', 'bcfid': '4.06'}
 Oracle ACC : {'benign': '0.630', 'malignant': '0.890', 'mean': '0.760'}
 --

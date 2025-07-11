@@ -16,7 +16,7 @@ import torch
 from monai import transforms as mt
 
 from data_loaders_l import NiftiSynthesisDataset, BalancedSamplingDataModule
-from model_architectures import UNet, MonaiDDPM
+from model_architectures import UNet, MonaiDDPM, ConditionalWGAN
 
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 torch.set_float32_matmul_precision('medium')
@@ -62,7 +62,7 @@ else:
     # create a new experiment and copy current set up
     existing = [d for d in base_dir.iterdir() if d.is_dir() and d.name[:3].isdigit()]
     next_num = (max(int(d.name[:3]) for d in existing) + 1) if existing else 1
-    experiment_name = f"{next_num:03d}_{cfg_exp_name}"
+    experiment_name = f"{next_num:03d}_{config['model']}_{cfg_exp_name}"
     experiment_path = base_dir / experiment_name
     experiment_path.mkdir(exist_ok=True)
     
@@ -107,8 +107,7 @@ full_data_path = os.path.join(root_dir, data_dir)
 # train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 # UNCOMMENT FOR SANITY CHECK ====
 
-train_transforms = mt.Compose(
-    [
+transform_list =     [
         mt.LoadImaged(keys=["image"], image_only=True),
         mt.SqueezeDimd(keys=["image"], dim=-1), # (H,W,1) → (H,W)
         mt.EnsureChannelFirstd(keys=["image"]), # (1,H,W)
@@ -132,15 +131,38 @@ train_transforms = mt.Compose(
         mt.ToTensord(keys=["image"]),
 
         # conditionality stuff, applied to labels
-        mt.RandLambdad(keys=["class"], prob=0.15, func=lambda x: -1 * torch.ones_like(x)),
+        # mt.RandLambdad(keys=["class"], prob=0.15, func=lambda x: -1 * torch.ones_like(x)),
+        # mt.Lambdad(
+        #     keys=["class"],
+        #     func=lambda x: x.clone().detach().to(torch.float32).unsqueeze(0).unsqueeze(0)
+        #     if isinstance(x, torch.Tensor)
+        #     else torch.as_tensor(x, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+        # )
+    ]
+
+if config["model"] == "GAN":
+    transform_list.extend([
+        mt.Resized(keys=["image"], spatial_size=(64, 64),
+                mode="bilinear", align_corners=False),
+        mt.Lambdad(keys=["class"],
+                func=lambda x: torch.as_tensor(x, dtype=torch.long).squeeze())
+    ])
+
+else:  # DDPM conditionality stuff, applied to labels
+    transform_list.extend([
+        mt.RandLambdad(keys=["class"], prob=0.15,
+                       func=lambda x: -1 * torch.ones_like(x)),
         mt.Lambdad(
             keys=["class"],
-            func=lambda x: x.clone().detach().to(torch.float32).unsqueeze(0).unsqueeze(0)
+            func=lambda x: x.clone().detach().to(torch.float32)
+                .unsqueeze(0).unsqueeze(0)
             if isinstance(x, torch.Tensor)
             else torch.as_tensor(x, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
         )
-    ]
-)
+    ])
+
+
+train_transforms = mt.Compose(transform_list)
 
 
 if config['dynamic_balanced_sampling']: # ASSURE EQUAL CLASS NUMBER PER EPOCH. This way the synthetic model is not biased toward a benign prior
@@ -188,10 +210,17 @@ def find_latest_ckpt(exp_dir):
 resume_ckpt = find_latest_ckpt(experiment_path)
 if resume_ckpt:
     print(f"🔄  resuming from checkpoint: {resume_ckpt}")
-    model = MonaiDDPM.load_from_checkpoint(resume_ckpt)
+    mdl_cls = MonaiDDPM if config["model"] == "DDPM" else ConditionalWGAN
+    model   = mdl_cls.load_from_checkpoint(resume_ckpt)
+    
 else:
     print("🆕  no checkpoint found – starting from scratch")
-    model = MonaiDDPM(lr=learning_rate, T=1000)
+    print(f"Using model {config['model']}..")
+    if config['model'] == 'DDPM':
+        model = MonaiDDPM(lr=learning_rate, T=1000)
+    elif config['model'] == 'GAN':
+        model = ConditionalWGAN(n_classes=2, z_dim=128, lr=2e-4,
+                        n_critic=5, grad_penalty_weight=10.0)
 
 # if config['conditional']:
 #     model = MonaiDDPM(lr=learning_rate, T=1000)
@@ -207,35 +236,41 @@ print(f"Model initialized & EMBED loaded. Initiating experiment {experiment_name
 # Set up callbacks
 tb_logger = pl_loggers.TensorBoardLogger('logs/', name=experiment_name)
 
+metric_to_watch = "g_loss" if config["model"] == "GAN" else "train_loss"
+
 checkpoint_callback = ModelCheckpoint(
-    dirpath=os.path.join(experiment_path, "checkpoints"),
-    filename=f"{{epoch:02d}}-{{step}}",
-    auto_insert_metric_name=True,
+    dirpath=experiment_path / "checkpoints",
+    filename="{epoch:02d}-{step}",
+    monitor=metric_to_watch,
+    mode="min",
     save_top_k=1,
-    monitor="train_loss",
-    mode="min",
 )
+
 early_stopping = EarlyStopping(
-    monitor="train_loss",
-    patience=5,
+    monitor=metric_to_watch,
     mode="min",
-    check_on_train_epoch_end=True,
+    patience=5,
 )
+
 lr_monitor = LearningRateMonitor(logging_interval='epoch')
 
 # Set up Trainer
+clip_val = 1.0 if config["model"] == "DDPM" else 0.0
+grad_accum = 4 if config["model"] == "DDPM" else 1
+use_amp = False if config["model"] == "GAN" else True
+
 trainer = pl.Trainer(
     fast_dev_run=config['fast_dev_run'],
     reload_dataloaders_every_n_epochs=reload_dataloaders_every_n_epochs, # for balancing per-epoch
     max_epochs=num_epochs,
     accelerator="auto",
-    precision=16,
+    precision = 16 if use_amp else 32,   # full FP32 for the GAN
     logger=tb_logger,
     callbacks=[checkpoint_callback, early_stopping, lr_monitor],
     enable_progress_bar=True,
     num_sanity_val_steps=0,
-    gradient_clip_val=1.0,
-    accumulate_grad_batches=4,
+    gradient_clip_val=clip_val,
+    accumulate_grad_batches=grad_accum,
     **({"resume_from_checkpoint": resume_ckpt} if resume_ckpt else {})
     )
 
