@@ -58,9 +58,12 @@ ckpt = "121_DDPM_binary_21fixedmatching_12vs56/checkpoints/epoch=20-step=1827.ck
 ckpt = "120_DDPM_binary_21perepoch_12vs56/checkpoints/epoch=19-step=1740.ckpt" # seems decent! Even guidance scale 4 gets 70% accuracy.
 ckpt = "123_DDPM_binary_11_5perepoch_12vs56/checkpoints/epoch=20-step=1512.ckpt" # 
 ckpt = "124_DDPM_binary_11perepoch_12vs56/checkpoints/epoch=26-step=1566.ckpt"
+ckpt = "140_DDPM_augmentationsgeometric_binary_11perepoch_12vs56/checkpoints/epoch=26-step=1566.ckpt" # let's see augmentations doin stuff
 CKPT_PATH = root / ckpt
 """
-experiment 123 # binary, 1:1 epoch-wise, 12 vs 56
+
+--
+experiment 124 # binary, 1:1 epoch-wise, 12 vs 56
 --
 experiment 123 # binary, 1.5:1 epoch-wise, 12 vs 56
 --
@@ -75,6 +78,8 @@ experiment 106 # binary
 experiment 107 # 4 class
 
 GS @ 0
+
+--
 
 --
 FID : {'benign': '0.78', 'malignant': '1.13', 'mean': '0.96', 'global': '0.85', 'bcfid': '0.01'}
@@ -96,6 +101,8 @@ FID : {'benign': '0.66', 'malignant': '1.01', 'probably_benign': '0.47', 'suspic
 Oracle ACC : {'benign': '0.250', 'malignant': '0.050', 'probably_benign': '0.490', 'suspicious': '0.230', 'mean': '0.255'}
 
 GS @ 4
+
+--
 
 --
 FID : {'benign': '1.41', 'malignant': '0.54', 'mean': '0.97', 'global': '0.47', 'bcfid': '2.01'}
@@ -120,6 +127,8 @@ Oracle ACC : {'benign': '0.180', 'malignant': '0.100', 'probably_benign': '0.370
 GS @ 7
 
 --
+
+--
 FID : {'benign': '2.04', 'malignant': '1.20', 'mean': '1.62', 'global': '0.83', 'bcfid': '3.47'}
 Oracle ACC : {'benign': '0.670', 'malignant': '0.840', 'mean': '0.755'}
 --
@@ -139,6 +148,8 @@ FID : {'benign': '1.04', 'malignant': '1.20', 'probably_benign': '1.87', 'suspic
 Oracle ACC : {'benign': '0.140', 'malignant': '0.180', 'probably_benign': '0.430', 'suspicious': '0.490', 'mean': '0.310'}
 
 GS @ 8
+
+--
 
 --
 FID : {'benign': '2.63', 'malignant': '1.50', 'mean': '2.06', 'global': '1.15', 'bcfid': '4.06'}
@@ -176,7 +187,7 @@ print(f"Evaluating {CKPT_PATH}")
 NAME_TAG = f"{ckpt[:4]}"
 
 RESOLUTION = 256
-BATCH      = 8
+BATCH      = 16
 N_EVAL     = 100                       # samples / class
 SCALES     = [0, 4, 7, 8]
 

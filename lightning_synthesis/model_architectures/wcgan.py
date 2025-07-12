@@ -52,49 +52,65 @@ class ResBlockD(nn.Module):
 #  2.   generator & discriminator
 # ---------------------------------------------------------------------
 class Generator(nn.Module):
-    def __init__(self, z_dim, emb_dim, n_classes, base_ch=64, out_size=64):
+    """
+    7-stage generator producing 1-channel 512×512 images in [-1,1].
+    """
+    def __init__(self, z_dim, emb_dim, n_classes):
         super().__init__()
         self.embed = nn.Embedding(n_classes, emb_dim)
-        self.fc    = nn.Linear(z_dim, 4*4*4*base_ch)
-        ch = 4*base_ch
+
+        ch_top = 512
+        self.fc = nn.Linear(z_dim, 4 * 4 * ch_top)
+
         self.blocks = nn.ModuleList([
-            ResBlockG(ch, ch//2, emb_dim),    # 8×8
-            ResBlockG(ch//2, ch//4, emb_dim), # 16×16
-            ResBlockG(ch//4, ch//8, emb_dim), # 32×32
-            ResBlockG(ch//8, ch//8, emb_dim)  # 64×64
+            ResBlockG(ch_top,      ch_top,    emb_dim),   # → 8×8
+            ResBlockG(ch_top,      ch_top//2, emb_dim),   # → 16×16
+            ResBlockG(ch_top//2,   ch_top//4, emb_dim),   # → 32×32
+            ResBlockG(ch_top//4,   ch_top//8, emb_dim),   # → 64×64
+            ResBlockG(ch_top//8,   ch_top//16, emb_dim),  # → 128×128
+            ResBlockG(ch_top//16,  ch_top//32, emb_dim),  # → 256×256
+            ResBlockG(ch_top//32,  ch_top//32, emb_dim)   # → 512×512
         ])
-        self.to_img = nn.Conv2d(ch//8, 1, 3, 1, 1)
-        self.out_size = out_size
+
+        # *** only change: output 1 channel instead of 3
+        self.to_img = nn.Conv2d(ch_top//32, 1, kernel_size=3, padding=1)
 
     def forward(self, z, y):
         y_emb = self.embed(y)
-        h = self.fc(z).view(z.size(0), -1, 4, 4)
+        h = self.fc(z).view(z.size(0), 512, 4, 4)
         for blk in self.blocks:
             h = F.interpolate(h, scale_factor=2, mode="nearest")
             h = blk(h, y_emb)
         return torch.tanh(self.to_img(F.relu(h)))
 
 class Discriminator(nn.Module):
-    def __init__(self, n_classes, base_ch=64):
+    """
+    7 spectral-norm ResBlocks, projection conditional WGAN critic.
+    """
+    def __init__(self, n_classes, base_ch=128):
         super().__init__()
         ch = base_ch
         self.blocks = nn.ModuleList([
-            ResBlockD(1, ch,   downsample=True),   # 32×32
-            ResBlockD(ch, 2*ch, downsample=True),  # 16×16
-            ResBlockD(2*ch, 4*ch, downsample=True),# 8×8
-            ResBlockD(4*ch, 4*ch, downsample=False)
+            # *** only change: first block in_ch=1
+            ResBlockD(1,      ch,     downsample=True),   # 256×256
+            ResBlockD(ch,     2*ch,   downsample=True),   # 128×128
+            ResBlockD(2*ch,   4*ch,   downsample=True),   # 64×64
+            ResBlockD(4*ch,   4*ch,   downsample=True),   # 32×32
+            ResBlockD(4*ch,   4*ch,   downsample=True),   # 16×16
+            ResBlockD(4*ch,   4*ch,   downsample=True),   # 8×8
+            ResBlockD(4*ch,   4*ch,   downsample=False)   # 8×8
         ])
+
         self.linear = nn.utils.spectral_norm(nn.Linear(4*ch, 1))
-        # Projection for class-conditioning (Miyato et al.)
         self.embed  = nn.utils.spectral_norm(nn.Embedding(n_classes, 4*ch))
 
     def forward(self, x, y):
         h = x
         for blk in self.blocks:
             h = blk(h)
-        h = F.relu(h).sum(dim=(2, 3))          # global sum-pool
+        h = F.relu(h).sum(dim=(2, 3))
         out = self.linear(h) + (self.embed(y) * h).sum(dim=1, keepdim=True)
-        return out.squeeze(1)                  # (B,)
+        return out.squeeze(1)
 
 # ---------------------------------------------------------------------
 #  3.   LightningModule
@@ -107,8 +123,8 @@ class ConditionalWGAN(pl.LightningModule):
       • GP λ:           grad_penalty_weight
       • opt betas:      (0.0, 0.9) as recommended by Gulrajani et al.
     """
-    def __init__(self, n_classes, z_dim=128, lr=2e-4, n_critic=2,
-                 grad_penalty_weight=50.0):
+    def __init__(self, n_classes, z_dim=128, lr=1e-4, n_critic=1,
+                 grad_penalty_weight=100.0):
         super().__init__()
         self.save_hyperparameters()
         self.G = Generator(z_dim, emb_dim=128, n_classes=n_classes)
@@ -201,7 +217,7 @@ class ConditionalWGAN(pl.LightningModule):
     # --------------------------- optimizers -------------------------
     def configure_optimizers(self):
         opt_g = torch.optim.Adam(self.G.parameters(),
-                                 lr=self.hparams.lr, betas=(0.0, 0.9))
+                                 lr=self.hparams.lr, betas=(0.5, 0.999))
         opt_d = torch.optim.Adam(self.D.parameters(),
-                                 lr=0.5*self.hparams.lr, betas=(0.0, 0.9))
+                                 lr=0.5*self.hparams.lr, betas=(0.5, 0.999))
         return [opt_g, opt_d], []     # no schedulers

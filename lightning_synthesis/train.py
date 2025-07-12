@@ -257,7 +257,7 @@ else:
     if config['model'] == 'DDPM':
         model = MonaiDDPM(lr=learning_rate, T=1000)
     elif config['model'] == 'GAN':
-        model = ConditionalWGAN(n_classes=2, z_dim=128, lr=2e-4,
+        model = ConditionalWGAN(n_classes=2, z_dim=128, lr=1e-4,
                         n_critic=5, grad_penalty_weight=10.0)
 
 # if config['conditional']:
@@ -274,7 +274,7 @@ print(f"Model initialized & EMBED loaded. Initiating experiment {experiment_name
 # Set up callbacks
 tb_logger = pl_loggers.TensorBoardLogger('logs/', name=experiment_name)
 
-metric_to_watch = "g_loss" if config["model"] == "GAN" else "train_loss"
+metric_to_watch = "wasserstein" if config["model"] == "GAN" else "train_loss"
 
 checkpoint_callback = ModelCheckpoint(
     dirpath=experiment_path / "checkpoints",
@@ -284,10 +284,11 @@ checkpoint_callback = ModelCheckpoint(
     save_top_k=1,
 )
 
+patience = 5 if config ['model'] == 'DDPM' else 10
 early_stopping = EarlyStopping(
     monitor=metric_to_watch,
     mode="min",
-    patience=5,
+    patience=patience,
 )
 
 lr_monitor = LearningRateMonitor(logging_interval='epoch')
