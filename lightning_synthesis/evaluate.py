@@ -78,9 +78,11 @@ experiment 106 # binary
 experiment 107 # 4 class
 
 GS @ 0
-
+FID : {'benign': '3.11', 'malignant': '3.97', 'mean': '3.54', 'global': '3.45', 'bcfid': '0.01'}
+Oracle ACC : {'benign': '0.950', 'malignant': '0.060', 'mean': '0.505'}
 --
-
+FID : {'benign': '1.94', 'malignant': '2.51', 'mean': '2.23', 'global': '2.12', 'bcfid': '0.04'}
+Oracle ACC : {'benign': '0.890', 'malignant': '0.120', 'mean': '0.505'}
 --
 FID : {'benign': '0.78', 'malignant': '1.13', 'mean': '0.96', 'global': '0.85', 'bcfid': '0.01'}
 Oracle ACC : {'benign': '0.690', 'malignant': '0.330', 'mean': '0.510'}
@@ -101,9 +103,11 @@ FID : {'benign': '0.66', 'malignant': '1.01', 'probably_benign': '0.47', 'suspic
 Oracle ACC : {'benign': '0.250', 'malignant': '0.050', 'probably_benign': '0.490', 'suspicious': '0.230', 'mean': '0.255'}
 
 GS @ 4
-
+FID : {'benign': '4.07', 'malignant': '3.45', 'mean': '3.76', 'global': '3.51', 'bcfid': '0.58'}
+Oracle ACC : {'benign': '0.950', 'malignant': '0.300', 'mean': '0.625'}
 --
-
+FID : {'benign': '2.34', 'malignant': '2.14', 'mean': '2.24', 'global': '2.12', 'bcfid': '0.42'}
+Oracle ACC : {'benign': '0.960', 'malignant': '0.220', 'mean': '0.590'}
 --
 FID : {'benign': '1.41', 'malignant': '0.54', 'mean': '0.97', 'global': '0.47', 'bcfid': '2.01'}
 Oracle ACC : {'benign': '0.770', 'malignant': '0.540', 'mean': '0.655'}
