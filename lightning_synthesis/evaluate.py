@@ -61,7 +61,7 @@ ckpt = "124_DDPM_binary_11perepoch_12vs56/checkpoints/epoch=26-step=1566.ckpt"
 ckpt = "140_DDPM_augmentationsgeometric_binary_11perepoch_12vs56/checkpoints/epoch=26-step=1566.ckpt" # let's see augmentations doin stuff
 CKPT_PATH = root / ckpt
 """
-
+experiment 140 # binary, 1:1 epoch-wise, 12 vs 56, geometric augs
 --
 experiment 124 # binary, 1:1 epoch-wise, 12 vs 56
 --
@@ -129,9 +129,11 @@ Oracle ACC : {'benign': '0.180', 'malignant': '0.100', 'probably_benign': '0.370
 
 
 GS @ 7
-
+FID : {'benign': '6.46', 'malignant': '5.38', 'mean': '5.92', 'global': '5.34', 'bcfid': '1.81'}
+Oracle ACC : {'benign': '0.810', 'malignant': '0.680', 'mean': '0.745'}
 --
-
+FID : {'benign': '2.79', 'malignant': '1.99', 'mean': '2.39', 'global': '2.18', 'bcfid': '0.73'}
+Oracle ACC : {'benign': '0.960', 'malignant': '0.540', 'mean': '0.750'}
 --
 FID : {'benign': '2.04', 'malignant': '1.20', 'mean': '1.62', 'global': '0.83', 'bcfid': '3.47'}
 Oracle ACC : {'benign': '0.670', 'malignant': '0.840', 'mean': '0.755'}
@@ -152,9 +154,11 @@ FID : {'benign': '1.04', 'malignant': '1.20', 'probably_benign': '1.87', 'suspic
 Oracle ACC : {'benign': '0.140', 'malignant': '0.180', 'probably_benign': '0.430', 'suspicious': '0.490', 'mean': '0.310'}
 
 GS @ 8
-
+FID : {'benign': '7.95', 'malignant': '7.46', 'mean': '7.71', 'global': '7.00', 'bcfid': '1.93'}
+Oracle ACC : {'benign': '0.810', 'malignant': '0.870', 'mean': '0.840'}
 --
-
+FID : {'benign': '3.04', 'malignant': '2.32', 'mean': '2.68', 'global': '2.43', 'bcfid': '0.83'}
+Oracle ACC : {'benign': '0.940', 'malignant': '0.620', 'mean': '0.780'}
 --
 FID : {'benign': '2.63', 'malignant': '1.50', 'mean': '2.06', 'global': '1.15', 'bcfid': '4.06'}
 Oracle ACC : {'benign': '0.630', 'malignant': '0.890', 'mean': '0.760'}
@@ -178,6 +182,9 @@ GS @ 9
 --
 --
 --
+--
+--
+--
 FID : {'benign': '1.74', 'malignant': '1.06', 'mean': '1.40', 'global': '0.96', 'bcfid': '1.05'}
 Oracle ACC : {'benign': '0.780', 'malignant': '0.600', 'mean': '0.690'}
 --
@@ -191,9 +198,9 @@ print(f"Evaluating {CKPT_PATH}")
 NAME_TAG = f"{ckpt[:4]}"
 
 RESOLUTION = 256
-BATCH      = 16
+BATCH      = 8
 N_EVAL     = 100                       # samples / class
-SCALES     = [0, 4, 7, 8]
+SCALES     = [9,10]#[0, 4, 7, 8]
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch.manual_seed(42); random.seed(42); np.random.seed(42)

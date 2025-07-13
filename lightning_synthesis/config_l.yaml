@@ -16,7 +16,7 @@ learning_rate: 0.00001
 num_epochs: 50  
 samples_per_class: 3676 # ignored if dynamic_balanced_sampling is True // Note that Malignant = 1148, or 1838 if both 5 and 6. Sample twice or thrice that.
 dynamic_balanced_sampling: True
-benign_to_malignant_ratio: 1.0 # for dynamic sampling, match how many benign per malignant for each epoch
+benign_to_malignant_ratio: 1.5 # for dynamic sampling, match how many benign per malignant for each epoch
 ## Benign: 3444
 ## Malignant: 1148
 
