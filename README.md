@@ -40,7 +40,7 @@ linardos‑u24_synthesis/
 1. **Create & activate** a fresh environment (Python 3.9 recommended)
 
    ```bash
-   conda create -n u24_synthesis python=3.9 -y
+   conda create -n u24_synthesis python=3.12 -y
    conda activate u24_synthesis
    ```
 

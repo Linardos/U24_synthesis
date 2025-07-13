@@ -19,5 +19,6 @@ seaborn
 setuptools
 statsmodels
 tqdm
+torchmetrics==1.6.1
 xformers==0.0.29.post3
 monai-generative
