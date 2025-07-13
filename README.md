@@ -40,15 +40,15 @@ linardos‑u24_synthesis/
 1. **Create & activate** a fresh environment (Python 3.9 recommended)
 
    ```bash
-   conda create -n u24_synthesis python=3.12 -y
-   conda activate u24_synthesis
+   conda create -n U24 python=3.12 -y
+   conda activate U24 
    ```
 
 2. **Install PyTorch** with CUDA *or* CPU only (choose the line that matches your system)
 
    ```bash
    # CUDA 12.1 (find the one for your version though
-   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+   pip install torch==2.6.0 torchvision==0.21.0 --index-url https://download.pytorch.org/whl/cu121
 
    ```
 
