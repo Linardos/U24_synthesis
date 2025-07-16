@@ -32,7 +32,7 @@ seed: 44
 sanity_check: False
 transform_check: basic # "basic" to just apply data preprocessing
 store_sample_per_epoch: True # to visualize images
-experiment_number: 62 # 62 onward is 12 vs 56
+experiment_number: 65 # 62 onward is 12 vs 56
 # --------60 # 48-53 we test four class. 55 to 60 we test binary, last experiment  full synthetic in each case (53 and 60)
 
 experiment_name: binary_12vs56 # four_class_pretrainedImagenet_frozenlayers #binary_classification #

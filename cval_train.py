@@ -108,28 +108,24 @@ def min_max_normalization(tensor):
     return normalized_tensor
 
 # Transform with random flipping
-if transform_check =='basic':
 
-    transform = transforms.Compose([
-        transforms.Lambda(lambda x: min_max_normalization(x)),  # Min-max normalization
-        # transforms.Lambda(lambda x: histogram_standardization(x, ref_cdf, ref_bins)),  # Histogram Standardization
-        transforms.Normalize(mean=[0.5], std=[0.5]),  # Normalize the grayscale channel
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomVerticalFlip(),
-    ])
-elif transform_check =='augmentations':
-        transform = transforms.Compose([
-        transforms.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.9, 1.1)),
-        transforms.RandomRotation(degrees=15),
-        transforms.Lambda(lambda x: min_max_normalization(x)),  # Min-max normalization,
-        transforms.Normalize(mean=[0.5], std=[0.5]),  # Normalize the grayscale channel
-        # transforms.Lambda(lambda x: apply_gaussian_denoise(x)),
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomVerticalFlip()
-    ])
-else:
-    print("Warning: no transformations are applied")
-    transform = None
+import torchvision.transforms as T
+
+train_tf = T.Compose([
+    T.Lambda(min_max_normalization),
+    # random augments only here
+    T.RandomHorizontalFlip(),
+    T.RandomVerticalFlip(),
+    T.Normalize(mean=[0.5], std=[0.5]),
+])
+
+eval_tf = T.Compose([
+    T.Lambda(min_max_normalization),
+    T.Normalize(mean=[0.5], std=[0.5]),
+])
+
+
+
 
 # Load the dataset with transformations applied
 # ------------- paths -------------
@@ -160,8 +156,9 @@ print(f"Loading data from:\n  • {real_path}\n  • {synth_path}")
 #     n_synth = len(dataset.datasets[1])
 
 # ---------- get data labels once ----------
-real_ds   = NiftiDataset(real_path,  transform)
-synth_ds  = NiftiDataset(synth_path, transform)
+real_ds  = NiftiDataset(real_path,  train_tf)
+synth_ds = NiftiDataset(synth_path, train_tf)   # augments OK on synth
+val_ds   = NiftiDataset(real_path,  eval_tf)
 
 # grab per-sample class ids
 def ds_labels(ds):
@@ -199,16 +196,6 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # -------- model choice ----------------------------
 model      = get_model(model_name, pretrained=True).to(device)
 
-# Loss with inverse class frequency weights
-class_counts = np.array([label_summary[c] for c in CLASS_NAMES])
-# (Benign, Malignant, Probably Benign, Suspicious)
-
-# inverse-freq weights → more weight for rare classes
-# weights = 1.0 / class_counts
-# weights = weights / weights.sum() * len(class_counts)   # re-scale so avg = 1
-# weight_tensor = torch.tensor(weights, dtype=torch.float32).to(device)
-
-# criterion = nn.CrossEntropyLoss(weight=weight_tensor)
 criterion = nn.CrossEntropyLoss()
 optimizer  = torch.optim.Adam(
                 filter(lambda p: p.requires_grad, model.parameters()),
@@ -222,43 +209,18 @@ csv_log_file = experiment_path / "logs.csv"
 with open(csv_log_file, mode='w', newline='') as csvfile:
     fieldnames = [
         'fold','epoch','phase','model_name',
-        'loss','accuracy','AUC','balanced_accuracy',
-        'sensitivity_benign','sensitivity_malignant',
-        'specificity_benign','specificity_malignant'
+        'loss','overall_accuracy','AUC','balanced_accuracy',
+        'ACC_benign','ACC_malignant'
     ]
-
     if config['num_classes'] >= 3:
-        fieldnames.extend(['sensitivity_suspicious','specificity_suspicious'])
+        fieldnames.append('ACC_suspicious')
     if config['num_classes'] == 4:
-        fieldnames.extend(['sensitivity_prob_benign','specificity_prob_benign'])
+        fieldnames.append('ACC_prob_benign')
 
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
     writer.writeheader()
 
 # k-Fold cross-validation ------------
-# 0/1 flag for synthetic vs real
-# is_synth = np.zeros(len(dataset), dtype=int)
-# if isinstance(dataset, ConcatDataset):
-#     # ConcatDataset([real_subset, synth_subset])
-#     is_synth[len(dataset.datasets[0]):] = 1        # mark synthetic part
-
-# # composite label: class_id * 2 + is_synth
-# strat_key = labels * 2 + is_synth                 # values 0..(2*num_classes-1)
-
-# stratification logic:
-# | clinical class | real / synth | composite value |
-# | -------------- | ------------ | --------------- |
-# | Benign         | real (0)     | 0               |
-# | Benign         | synth (1)    | 1               |
-# | Malignant      | real (0)     | 2               |
-# | Malignant      | synth (1)    | 3               |
-# | ...            | …            | …               |
-# Because each pair has its own code, StratifiedKFold will treat them as separate “classes” and keep all eight (4 clinical × 2 sources) in equal proportion in every fold.
-
-# Dataset composition	is_synth vector	strat_key values produced	What StratifiedKFold balances
-# All real	all 0	labels * 2 → 0, 2, 4, 6…	Only the clinical classes (Benign-real, Malignant-real, …). There are no “synthetic” codes, so folds stay class-balanced exactly as in the ordinary case.
-# All synthetic	all 1	labels * 2 + 1 → 1, 3, 5, 7…	Again you get one unique code per clinical class, just offset by +1. Folds are still class-balanced; the “source” dimension is moot because every sample shares the same source.
-
 
 cv = StratifiedKFold(n_splits=k_folds,
                      shuffle=True, random_state=random_seed)
@@ -288,7 +250,7 @@ for fold, (train_real_idx, val_real_idx) in enumerate(
 
     train_subset = ConcatDataset([Subset(real_ds,  chosen_real),
                                   Subset(synth_ds, chosen_synth)])
-    val_subset   = Subset(real_ds, val_real_idx)          # 100 % real
+    val_subset   = Subset(val_ds, val_real_idx)          # 100 % real
 
     #  PRINT split summary
     # print(f"\nFold {fold+1}/{k_folds}  │  "
@@ -406,36 +368,34 @@ for fold, (train_real_idx, val_real_idx) in enumerate(
             with open(csv_log_file, mode='a', newline='') as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                 dict_to_log = {
-                    'fold': fold + 1,
-                    'epoch': epoch + 1,
+                    'fold': fold+1,
+                    'epoch': epoch+1,
                     'phase': phase,
                     'model_name': model_name,
                     'loss': epoch_loss,
-                    'accuracy': epoch_acc.item(),
+                    'overall_accuracy': epoch_acc.item(),
                     'AUC': epoch_auc,
                     'balanced_accuracy': balanced_acc,
-                    'sensitivity_benign':    per_class_sensitivity[0],
-                    'sensitivity_malignant': per_class_sensitivity[1],
-                    'specificity_benign':    per_class_specificity[0],
-                    'specificity_malignant': per_class_specificity[1],
+                    'ACC_benign':    per_class_sensitivity[0],
+                    'ACC_malignant': per_class_sensitivity[1],
                 }
+                # append optional classes as above
+
                 if config['num_classes'] > 2:
                     dict_to_log.update({
-                        'sensitivity_suspicious': per_class_sensitivity[2],
-                        'specificity_suspicious': per_class_specificity[2],
+                        'ACC_suspicious': per_class_sensitivity[2],
                     })
                 if config['num_classes'] == 4:
                     dict_to_log.update({
-                        'sensitivity_prob_benign': per_class_sensitivity[3],
-                        'specificity_prob_benign': per_class_specificity[3],
+                        'ACC_prob_benign': per_class_sensitivity[3],
                     })
                 writer.writerow(dict_to_log)
 
 
             if phase == 'val':
-                print("\nPer-class sensitivity || specificity:")
+                print("\nPer-class accuracy:")
                 for i, cls in enumerate(CLASS_NAMES):
-                    print(f"   {cls:>15}: {per_class_sensitivity[i]:.3f} || {per_class_specificity[i]:.3f}")
+                    print(f"   {cls:>15}: {per_class_sensitivity[i]:.3f}")
 
                 improved = False
                 if early_stop_metric == "auc":

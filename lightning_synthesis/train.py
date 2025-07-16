@@ -157,9 +157,9 @@ geometric_augmentations = [
 
 intensity_augmentations = [
     # ---------------- intensity -----------------
-    mt.RandAdjustContrastd(keys=["image"], prob=0.5, gamma=(0.9, 1.1)),
-    mt.RandGaussianNoised(keys=["image"], prob=0.3, mean=0.0,
-                          std=(0.0, 0.02)),                  # subtle noise
+    mt.RandAdjustContrastd(keys=["image"], prob=0.2, gamma=(0.9, 1.1)),
+    # mt.RandGaussianNoised(keys=["image"], prob=0.3, mean=0.0,
+    #                       std=(0.0, 0.02)),                  # subtle noise
 ]
 
 if config['augmentations']=='geometric':
