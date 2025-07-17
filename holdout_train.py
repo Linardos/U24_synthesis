@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-# train_holdout.py  –  single hold-out split, real + synthetic mix
-# ---------------------------------------------------------------------
+# train_holdout_monai.py  – single hold-out split with NiftiSynthesisDataset
+# -------------------------------------------------------------------------
 
 import os, sys, json, yaml, random, shutil, csv
 from pathlib import Path
@@ -8,17 +8,17 @@ import numpy as np
 import torch, torch.nn as nn
 from torch.utils.data import DataLoader, Subset, ConcatDataset
 from torch.optim.lr_scheduler import CosineAnnealingLR
-import torchvision.transforms as T
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     roc_auc_score, balanced_accuracy_score, confusion_matrix
 )
 from tqdm import tqdm
 
+import monai.transforms as mt                        # ← MONAI
+from data_loaders import NiftiSynthesisDataset        # ← your dict-style dataset
 from models import get_model
-from data_loaders import NiftiDataset
 
-# ─────────────────────── configuration ────────────────────────────
+# ─────────────── configuration ────────────────────────────────────────────
 with open("config.yaml") as f:
     cfg = yaml.safe_load(f)
 
@@ -28,11 +28,11 @@ val_split      = cfg.get("val_split", 0.2)
 
 random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
 
-root_dir       = cfg["root_dir"]
-real_path      = os.path.join(root_dir, cfg["data_dir"])
-synth_path     = os.path.join(root_dir, cfg["synth_data_dir"])
+root_dir   = cfg["root_dir"]
+real_path  = os.path.join(root_dir, cfg["data_dir"])
+synth_path = os.path.join(root_dir, cfg["synth_data_dir"])
 
-# ─────────────────────── experiment folder ─────────────────────────
+# ─────────────── experiment folder ────────────────────────────────────────
 exp_dir = Path("experiments") / (
     f'{cfg["experiment_number"]:03d}_holdout_{cfg["model_name"]}_'
     f'{cfg["experiment_name"]}_seed{seed}_real_perc{real_fraction}'
@@ -40,24 +40,23 @@ exp_dir = Path("experiments") / (
 exp_dir.mkdir(parents=True, exist_ok=False)
 shutil.copy("config.yaml", exp_dir / "config.yaml")
 
-# ─────────────────────── transforms ────────────────────────────────
-def min_max(x): return (x - x.min()) / (x.max() - x.min())
-
-train_tf = T.Compose([
-    T.Lambda(min_max),
-    T.RandomHorizontalFlip(),
-    T.RandomVerticalFlip(),
-    T.Normalize(mean=[0.5], std=[0.5]),
+# ─────────────── MONAI transforms (dict-based) ────────────────────────────
+real_tf = mt.Compose([
+    mt.LoadImaged(keys=["image"], image_only=True),
+    mt.SqueezeDimd(keys=["image"], dim=-1),
+    mt.EnsureChannelFirstd(keys=["image"]),
+    mt.Lambdad(keys=["image"],
+               func=lambda img: (img - img.mean()) / (img.std() + 1e-8)),
+    mt.ScaleIntensityd(keys=["image"], minv=0.0, maxv=1.0),
+    mt.ToTensord(keys=["image"]),
 ])
-eval_tf = T.Compose([
-    T.Lambda(min_max),
-    T.Normalize(mean=[0.5], std=[0.5]),
-])
+# You can create a *different* eval_tf if you want, but real_tf is deterministic
+eval_tf = real_tf
 
-# ─────────────────────── datasets & labels ─────────────────────────
-real_ds  = NiftiDataset(real_path,  train_tf)
-synth_ds = NiftiDataset(synth_path, train_tf)
-val_ds   = NiftiDataset(real_path,  eval_tf)   # same file order as real_ds!
+# ─────────────── datasets & labels ────────────────────────────────────────
+real_ds  = NiftiSynthesisDataset(real_path,  transform=real_tf)
+synth_ds = NiftiSynthesisDataset(synth_path, transform=real_tf)
+val_ds   = NiftiSynthesisDataset(real_path, transform=eval_tf)  # same order!
 
 def labels(ds):
     y = []
@@ -71,7 +70,7 @@ synth_lbl = labels(synth_ds)
 classes = np.sort(np.unique(real_lbl))
 print(f"Loaded  real={len(real_ds)}  synth={len(synth_ds)}  classes={classes}")
 
-# ─────────────────────── train / val split (real only) ────────────
+# ─────────────── train / val split (real only) ────────────────────────────
 tr_idx, val_idx = train_test_split(
     np.arange(len(real_ds)),
     test_size=val_split,
@@ -81,7 +80,7 @@ tr_idx, val_idx = train_test_split(
 
 rng = np.random.default_rng(seed)
 
-# ── build mixed-train subset (real subset -- plus synthetic filler) ─
+# ── build mixed train subset ──────────────────────────────────────────────
 synth_pool_by_cls = {c: np.where(synth_lbl == c)[0] for c in classes}
 
 keep_real, add_synth = [], []
@@ -94,12 +93,10 @@ for c in classes:
 
     keep_real.extend(cls_idx[:n_keep])
 
-    if n_need:
-        pool = synth_pool_by_cls[c]
-        if len(pool):
-            add_synth.extend(rng.choice(pool, size=n_need, replace=False))
-        else:
-            print(f"⚠️  no synthetic samples for class {c}")
+    if n_need and len(synth_pool_by_cls[c]):
+        add_synth.extend(rng.choice(synth_pool_by_cls[c], size=n_need, replace=False))
+    elif n_need:
+        print(f"⚠️  no synthetic samples for class {c}")
 
 train_set = ConcatDataset([
     Subset(real_ds,  keep_real),
@@ -117,7 +114,7 @@ json.dump(
 train_loader = DataLoader(train_set, batch_size=cfg["batch_size"], shuffle=True)
 val_loader   = DataLoader(val_set,   batch_size=cfg["batch_size"], shuffle=False)
 
-# ─────────────────────── model & optim ─────────────────────────────
+# ─────────────── model & optimisation ─────────────────────────────────────
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model  = get_model(cfg["model_name"], pretrained=True).to(device)
 
@@ -128,22 +125,20 @@ optim     = torch.optim.Adam(
 )
 sched = CosineAnnealingLR(optim, T_max=cfg["num_epochs"])
 
-# ─────────────────────── CSV logger ────────────────────────────────
+# ─────────────── CSV logger ───────────────────────────────────────────────
 header = ["epoch","phase","loss","overall_acc","AUC","balanced_acc"] + \
          [f"ACC_class{c}" for c in classes]
-log_file = open(exp_dir / "logs.csv", "w", newline="")
-writer   = csv.writer(log_file)
-writer.writerow(header)
+log_f = open(exp_dir / "logs.csv", "w", newline="")
+writer = csv.writer(log_f); writer.writerow(header)
 
-
-# ─────────────────────── training loop ─────────────────────────────
+# ─────────────── training loop ────────────────────────────────────────────
 best_auc, patience = -np.inf, 0
 for epoch in range(1, cfg["num_epochs"] + 1):
     print(f"\nEpoch {epoch}/{cfg['num_epochs']}")
     for phase, loader in [("train", train_loader), ("val", val_loader)]:
         model.train(phase == "train")
 
-        total, correct, running_loss = 0, 0, 0.0
+        total, correct, run_loss = 0, 0, 0.0
         all_y, all_p = [], []
 
         for x, y in tqdm(loader, leave=False):
@@ -154,44 +149,37 @@ for epoch in range(1, cfg["num_epochs"] + 1):
                 loss   = criterion(logits, y)
 
                 if phase == "train":
-                    optim.zero_grad()
-                    loss.backward()
-                    optim.step()
+                    optim.zero_grad(); loss.backward(); optim.step()
 
-            probs   = torch.softmax(logits, 1).detach()
-            preds   = probs.argmax(1)
-            running_loss += loss.item() * x.size(0)
-            correct      += (preds == y).sum().item()
-            total        += x.size(0)
-            all_y.extend(y.cpu().numpy())
-            all_p.extend(probs.cpu().numpy())
+            probs  = torch.softmax(logits, 1).detach()
+            preds  = probs.argmax(1)
+            run_loss += loss.item() * x.size(0)
+            correct  += (preds == y).sum().item()
+            total    += x.size(0)
+            all_y.extend(y.cpu().numpy()); all_p.extend(probs.cpu().numpy())
 
         # ── metrics ────────────────────────────────────────────────
-        all_y  = np.asarray(all_y)
-        all_p  = np.asarray(all_p)
+        all_y  = np.asarray(all_y); all_p = np.asarray(all_p)
         preds  = all_p.argmax(1)
 
-        cm  = confusion_matrix(all_y, preds, labels=classes)
-        tp  = np.diag(cm); fn = cm.sum(1) - tp
-        per_class_acc = tp / (tp + fn + 1e-12)
+        cm = confusion_matrix(all_y, preds, labels=classes)
+        tp = np.diag(cm); fn = cm.sum(1) - tp
+        per_cls_acc = tp / (tp + fn + 1e-12)
 
-        if len(classes) == 2:
-            auc = roc_auc_score(all_y, all_p[:,1])
-        else:
-            auc = roc_auc_score(all_y, all_p, multi_class='ovr')
+        auc = (roc_auc_score(all_y, all_p[:,1])
+               if len(classes) == 2 else
+               roc_auc_score(all_y, all_p, multi_class='ovr'))
 
         row = [epoch, phase,
-               running_loss / total,
+               run_loss / total,
                correct / total,
                auc,
                balanced_accuracy_score(all_y, preds),
-              *per_class_acc]
+               *per_cls_acc]
         writer.writerow(row)
-        
-        print(f"{phase:5s}  loss={row[2]:.4f}  acc={row[3]:.4f}  "
-              f"AUC={row[4]:.4f}")
 
-        # ── checkpoint on val AUC ─────────────────────────────────
+        print(f"{phase:5s}  loss={row[2]:.4f}  acc={row[3]:.4f}  acc_malignant={per_cls_acc[1]:.4f}  acc_benign={per_cls_acc[0]:.4f}   AUC={row[4]:.4f}")
+
         if phase == "val":
             if auc > best_auc + 0.002:
                 best_auc, patience = auc, 0
@@ -202,5 +190,4 @@ for epoch in range(1, cfg["num_epochs"] + 1):
 
     sched.step()
     if patience >= cfg["early_stopping_patience"]:
-        print("Early-stopping: no ΔAUC for", patience, "epochs.")
-        break
+        print("Early-stopping: no ΔAUC for", patience, "epochs."); break

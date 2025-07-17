@@ -12,7 +12,7 @@ on real data (no diffusion model, no FID).  All randomness is seeded so results
 are reproducible as long as the underlying dataset is unchanged.
 """
 
-import os, csv, random, yaml
+import os, csv, random, yaml, json
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
@@ -32,24 +32,32 @@ from data_loaders_l import NiftiSynthesisDataset  # noqa: E402  (after sys.path 
 from models import get_model                       # noqa: E402
 
 # ── CONFIGURATION ──────────────────────────────────────────────────────────
-SEED        = 42          # reproducibility everywhere
-RESOLUTION  = 256         # image side length (for transforms)
-BATCH       = 4           # Oracle batch size (fp16 OK)
-N_EVAL      = 300         # images sampled *per class* to evaluate
-CONFIG_YAML = "config_l.yaml"  # same config file as before
+SEED         = 42          # reproducibility everywhere
+RESOLUTION   = 256         # image side length (for transforms)
+BATCH        = 4           # Oracle batch size (fp16 OK)
+N_EVAL       = 300         # images sampled *per class* to evaluate
+USE_TEST_SET = True
+CONFIG_YAML  = "config_l.yaml"  # same config file as before
+ORACLE_DIR  = "066_holdout_resnet50_binary_12vs56_seed44_real_perc1.0"
 
 # Paths ----------------------------------------------------------------------------------
-DATA_ROOT = "/mnt/d/Datasets/EMBED/EMBED_binary_12vs56_256x256/test_balanced"
+if USE_TEST_SET:
+    DATA_ROOT = "/mnt/d/Datasets/EMBED/EMBED_binary_12vs56_256x256/test_balanced"
+else:
+    DATA_ROOT = "/mnt/d/Datasets/EMBED/EMBED_binary_12vs56_256x256/train/original"
+
 
 with open(CONFIG_YAML) as f:
     cfg = yaml.safe_load(f)
 
 if cfg["num_classes"] == 2:
-    ORACLE_CKPT = (
-        "/home/locolinux2/U24_synthesis/experiments/"
-        "062_resnet50_binary_12vs56_seed44_real_perc1.0/"
-        "checkpoints/best_resnet50_fold3.pt"
-    )
+    ORACLE_CKPT = f"/home/locolinux2/U24_synthesis/experiments/{ORACLE_DIR}/best.pt"
+        
+    # ORACLE_CKPT = (
+    #     "/home/locolinux2/U24_synthesis/experiments/"
+    #     "062_resnet50_binary_12vs56_seed44_real_perc1.0/"
+    #     "checkpoints/best_resnet50_fold3.pt"
+    # )
 elif cfg["num_classes"] == 4:
     ORACLE_CKPT = (
         "/home/locolinux2/U24_synthesis/experiments/"
@@ -80,16 +88,28 @@ real_tf = mt.Compose([
 full_ds = NiftiSynthesisDataset(DATA_ROOT, transform=real_tf)
 
 # ── BUILD 10 % VALIDATION SPLIT + PER‑CLASS SUBSETS ──────────────────────
-g = torch.Generator().manual_seed(SEED)
-val_len  = int(len(full_ds) * 0.1)
-_, val_ds = torch.utils.data.random_split(full_ds, [len(full_ds) - val_len, val_len], generator=g)
+if USE_TEST_SET:
+    g = torch.Generator().manual_seed(SEED)
+    val_len  = int(len(full_ds) * 0.1)
+    _, val_ds = torch.utils.data.random_split(full_ds, [len(full_ds) - val_len, val_len], generator=g)
+else:
+    # Folder that contains best.pt and indices.json (adjust if needed)
+    TRAIN_EXP_DIR = f"/home/locolinux2/U24_synthesis/experiments/{ORACLE_DIR}"
 
-# Category names must match training config to map label‑ids → strings
-categories: List[str] = ["benign", "malignant"]
-if cfg["num_classes"] >= 3:
-    categories.append("probably_benign")
-if cfg["num_classes"] == 4:
-    categories.append("suspicious")
+    with open(os.path.join(TRAIN_EXP_DIR, "indices.json")) as jf:
+        idx_dict = json.load(jf)
+    val_idx = np.asarray(idx_dict["val_real"], dtype=int)     # same order as real_ds
+    val_ds = Subset(full_ds, val_idx) 
+    
+# --- category names --------------------------------------------
+if cfg["num_classes"] == 2:
+    categories = ["benign", "malignant"]
+elif cfg["num_classes"] == 3:
+    categories = ["benign", "malignant", "suspicious"]
+elif cfg["num_classes"] == 4:
+    categories = ["benign", "malignant", "suspicious", "probably_benign"]
+else:
+    raise ValueError("num_classes must be 2, 3, or 4")
 
 # Collect indices by class
 idx_by_class: Dict[str, List[int]] = {c: [] for c in categories}
@@ -102,6 +122,7 @@ rng = np.random.default_rng(SEED)
 for c in categories:
     rng.shuffle(idx_by_class[c])
     idx_by_class[c] = idx_by_class[c][:N_EVAL]
+    print(f"For class {c}, we are using {len(idx_by_class[c])} samples")
 
 val_loaders = {
     c: DataLoader(

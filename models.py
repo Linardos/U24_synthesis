@@ -96,7 +96,7 @@ def get_model(model_name: str, num_classes: int = num_classes, pretrained: bool 
     # make it 1-channel but keep pretrained kernels
     backbone = adapt_first_conv_to_grayscale(backbone)
 
-    # freeze early layers (optional but useful against over-fitting)
+    # freeze early layers (useful against over-fitting)
     for name, p in backbone.named_parameters():
         if not name.startswith(("layer3", "layer4", "features.6")):
             p.requires_grad = False
