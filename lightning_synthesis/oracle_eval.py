@@ -36,12 +36,12 @@ SEED         = 42          # reproducibility everywhere
 RESOLUTION   = 256         # image side length (for transforms)
 BATCH        = 4           # Oracle batch size (fp16 OK)
 N_EVAL       = 300         # images sampled *per class* to evaluate
-USE_TEST_SET = True
+EVAL_SET = 'val'
 CONFIG_YAML  = "config_l.yaml"  # same config file as before
-ORACLE_DIR  = "066_holdout_resnet50_binary_12vs56_seed44_real_perc1.0"
+ORACLE_DIR  = "062_resnet50_binary_12vs56_seed44_real_perc1.0"
 
 # Paths ----------------------------------------------------------------------------------
-if USE_TEST_SET:
+if EVAL_SET == 'test':
     DATA_ROOT = "/mnt/d/Datasets/EMBED/EMBED_binary_12vs56_256x256/test_balanced"
 else:
     DATA_ROOT = "/mnt/d/Datasets/EMBED/EMBED_binary_12vs56_256x256/train/original"
@@ -51,13 +51,13 @@ with open(CONFIG_YAML) as f:
     cfg = yaml.safe_load(f)
 
 if cfg["num_classes"] == 2:
-    ORACLE_CKPT = f"/home/locolinux2/U24_synthesis/experiments/{ORACLE_DIR}/best.pt"
+    # ORACLE_CKPT = f"/home/locolinux2/U24_synthesis/experiments/{ORACLE_DIR}/best.pt"
         
-    # ORACLE_CKPT = (
-    #     "/home/locolinux2/U24_synthesis/experiments/"
-    #     "062_resnet50_binary_12vs56_seed44_real_perc1.0/"
-    #     "checkpoints/best_resnet50_fold3.pt"
-    # )
+    ORACLE_CKPT = (
+        "/home/locolinux2/U24_synthesis/experiments/"
+        "062_resnet50_binary_12vs56_seed44_real_perc1.0/"
+        "checkpoints/best_resnet50_fold3.pt"
+    )
 elif cfg["num_classes"] == 4:
     ORACLE_CKPT = (
         "/home/locolinux2/U24_synthesis/experiments/"
@@ -88,18 +88,23 @@ real_tf = mt.Compose([
 full_ds = NiftiSynthesisDataset(DATA_ROOT, transform=real_tf)
 
 # ── BUILD 10 % VALIDATION SPLIT + PER‑CLASS SUBSETS ──────────────────────
-if USE_TEST_SET:
+if EVAL_SET=='test':
     g = torch.Generator().manual_seed(SEED)
     val_len  = int(len(full_ds) * 0.1)
     _, val_ds = torch.utils.data.random_split(full_ds, [len(full_ds) - val_len, val_len], generator=g)
-else:
+elif EVAL_SET=='val':
     # Folder that contains best.pt and indices.json (adjust if needed)
     TRAIN_EXP_DIR = f"/home/locolinux2/U24_synthesis/experiments/{ORACLE_DIR}"
 
-    with open(os.path.join(TRAIN_EXP_DIR, "indices.json")) as jf:
+    with open(os.path.join(TRAIN_EXP_DIR, "indices_fold3.json")) as jf:
         idx_dict = json.load(jf)
     val_idx = np.asarray(idx_dict["val_real"], dtype=int)     # same order as real_ds
     val_ds = Subset(full_ds, val_idx) 
+else:
+    g = torch.Generator().manual_seed(42)
+    val_len  = int(len(full_ds) * 0.1)
+    train_len = len(full_ds) - val_len
+    _, val_ds = torch.utils.data.random_split(full_ds, [train_len, val_len], generator=g)
     
 # --- category names --------------------------------------------
 if cfg["num_classes"] == 2:

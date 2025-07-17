@@ -17,37 +17,26 @@ full_data_path = os.path.join(root_dir, data_dir)
 
 NUM_CLASSES = config.get('num_classes', 4)  
 
-class NiftiSynthesisDataset(Dataset):
-    def __init__(self, full_data_path, transform=None, samples_per_class=None):
-        """
-        Args:
-            full_data_path (str): Path to the root directory of your data.
-            transform (callable, optional): Transform to be applied to each image.
-            samples_per_class (int, optional): Fixed number of samples to use from each label.
-                                               If provided, each class must have at least this many samples.
-        """
+class NiftiDataset(Dataset):
+    def __init__(self, full_data_path, transform=None):
         self.full_data_path = full_data_path
         self.transform = transform
-        self.samples_per_class = samples_per_class
         self.samples = self._load_samples()
 
     def _load_samples(self):
-
-        # label order per setting binary, 3-class, 4-class
-        label_sets = {
-            2: ["benign", "malignant"],
-            3: ["benign", "malignant", "suspicious"],
-            4: ["benign", "malignant", "suspicious", "probably_benign"],
+        samples = []
+        # Define the labels for each class
+        class_labels = {
+            'benign': 0,
+            'malignant': 1,
+            # 'suspicious': 2,
+            # 'probably_benign': 3,
         }
 
-        labels = label_sets.get(config["num_classes"])
-        if labels is None:
-            raise ValueError("num_classes must be 2, 3, or 4")
-
-        samples_by_label = {lbl: []      for lbl in labels}
-        class_labels     = {lbl: idx     for idx, lbl in enumerate(labels)}
-        # ------
-
+        if NUM_CLASSES >= 3:
+            class_labels['suspicious'] = 2
+        if NUM_CLASSES == 4:
+            class_labels['probably_benign'] = 3
 
         for class_name, label in class_labels.items():
             class_dir = os.path.join(self.full_data_path, class_name)
@@ -55,50 +44,38 @@ class NiftiSynthesisDataset(Dataset):
                 print(f"Warning: {class_dir} does not exist. Skipping...")
                 continue
 
+            # Iterate over each subdirectory within the class directory
             for subdir in os.listdir(class_dir):
                 subdir_path = os.path.join(class_dir, subdir)
+
+                # Find any .nii.gz file within the subdir
                 nii_files = [f for f in os.listdir(subdir_path) if f.endswith('.nii.gz')]
                 if nii_files:
-                    file_path = os.path.join(subdir_path, nii_files[0])
-                    samples_by_label[class_name].append((file_path, label))
+                    file_path = os.path.join(subdir_path, nii_files[0])  # Take the first .nii.gz file found
+                    samples.append((file_path, label))
                 else:
                     print(f"No .nii.gz file found in {subdir_path}")
 
-        # If the user requested a fixed number per class, enforce that
-        if self.samples_per_class:
-            fixed_samples = []
-            for class_name, sample_list in samples_by_label.items():
-                if len(sample_list) < self.samples_per_class:
-                    print(f"Not enough samples for class '{class_name}'. "
-                                     f"Requested {self.samples_per_class}, but found {len(sample_list)}, which is the sample number to be used")
-                    sample_list = sorted(sample_list)[:len(sample_list)]
-                    fixed_samples.extend(sample_list)
-                else:
-                    # For determinism, we sort and take the first N.
-                    # (Alternatively, you can randomize with a fixed seed.)
-                    sample_list = sorted(sample_list)[:self.samples_per_class]
-                    fixed_samples.extend(sample_list)
-            return fixed_samples
-        else:
-            # Otherwise, return all samples from all classes.
-            all_samples = []
-            for sample_list in samples_by_label.values():
-                all_samples.extend(sample_list)
-            return all_samples
+        return samples
 
     def __len__(self):
         return len(self.samples)
 
     def __getitem__(self, idx):
-        file_path, label = self.samples[idx] # path string!
+        file_path, label = self.samples[idx]
+        nifti_img = nib.load(file_path)
+        img_array = nifti_img.get_fdata()
+        img_tensor = torch.tensor(img_array, dtype=torch.float32)  # Convert to tensor
+        img_tensor = img_tensor.unsqueeze(0)  # Add channel dimension: [1, H, W, D]
 
-        sample = {"image": file_path, "class": label}
+        # Check if the tensor has an extra singleton dimension at the end and remove it
+        if img_tensor.shape[-1] == 1:
+            img_tensor = img_tensor.squeeze(-1)  # Remove singleton dimension at the end
+
         if self.transform:
-            sample = self.transform(sample)
+            img_tensor = self.transform(img_tensor)
 
-        # after ToTensord, sample["image"] is a (1,64,64) tensor
-        return sample["image"], sample["class"] #.clone().detach().to(torch.long) #torch.tensor(sample["class"], dtype=torch.long)
-
+        return img_tensor, label
 
 
 def stratified_real_synth_mix(real_ds, synth_ds, real_fraction, seed=0):

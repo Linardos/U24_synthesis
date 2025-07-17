@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# train_holdout_monai.py  – single hold-out split with NiftiSynthesisDataset
+# train_holdout_monai.py  – single hold-out split with NiftiDataset
 # -------------------------------------------------------------------------
 
 import os, sys, json, yaml, random, shutil, csv
@@ -14,8 +14,8 @@ from sklearn.metrics import (
 )
 from tqdm import tqdm
 
-import monai.transforms as mt                        # ← MONAI
-from data_loaders import NiftiSynthesisDataset        # ← your dict-style dataset
+import torchvision.transforms as T
+from data_loaders import NiftiDataset        # ← your dict-style dataset
 from models import get_model
 
 # ─────────────── configuration ────────────────────────────────────────────
@@ -40,23 +40,31 @@ exp_dir = Path("experiments") / (
 exp_dir.mkdir(parents=True, exist_ok=False)
 shutil.copy("config.yaml", exp_dir / "config.yaml")
 
-# ─────────────── MONAI transforms (dict-based) ────────────────────────────
-real_tf = mt.Compose([
-    mt.LoadImaged(keys=["image"], image_only=True),
-    mt.SqueezeDimd(keys=["image"], dim=-1),
-    mt.EnsureChannelFirstd(keys=["image"]),
-    mt.Lambdad(keys=["image"],
-               func=lambda img: (img - img.mean()) / (img.std() + 1e-8)),
-    mt.ScaleIntensityd(keys=["image"], minv=0.0, maxv=1.0),
-    mt.ToTensord(keys=["image"]),
+def min_max_normalization(tensor):
+    min_val = torch.min(tensor)
+    max_val = torch.max(tensor)
+    normalized_tensor = (tensor - min_val) / (max_val - min_val)
+    return normalized_tensor
+    
+train_tf = T.Compose([
+    T.Lambda(min_max_normalization),
+    # random augments only here
+    T.RandomHorizontalFlip(),
+    T.RandomVerticalFlip(),
+    T.Normalize(mean=[0.5], std=[0.5]),
 ])
-# You can create a *different* eval_tf if you want, but real_tf is deterministic
-eval_tf = real_tf
 
-# ─────────────── datasets & labels ────────────────────────────────────────
-real_ds  = NiftiSynthesisDataset(real_path,  transform=real_tf)
-synth_ds = NiftiSynthesisDataset(synth_path, transform=real_tf)
-val_ds   = NiftiSynthesisDataset(real_path, transform=eval_tf)  # same order!
+eval_tf = T.Compose([
+    T.Lambda(min_max_normalization),
+    T.Normalize(mean=[0.5], std=[0.5]),
+])
+
+# Load the dataset with transformations applied
+
+print(f"Loading data from:\n  • {real_path}\n  • {synth_path}")
+real_ds  = NiftiDataset(real_path,  train_tf)
+synth_ds = NiftiDataset(synth_path, train_tf)   # augments OK on synth
+val_ds   = NiftiDataset(real_path,  eval_tf)
 
 def labels(ds):
     y = []

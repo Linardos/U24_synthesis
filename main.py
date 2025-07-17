@@ -63,23 +63,11 @@ no_improvement_epochs = 0
 # Store the config.yaml file in the current experiment folder
 # ── EXPERIMENT FOLDER ──────────────────────────────────────────────────────────
 
-# 1) make sure the base directory exists
 base_dir = Path("experiments")
 base_dir.mkdir(exist_ok=True)
 
-# # 2) collect existing prefixes that match "000__something"
-# prefix_re = re.compile(r"^(\d{3})__")          # capture 3-digit prefix
-# prefixes  = [
-#     int(prefix_re.match(d.name).group(1))
-#     for d in base_dir.iterdir()
-#     if d.is_dir() and prefix_re.match(d.name)
-# ]
-
-# # 3) choose the next number (start from 1 if folder is empty)
 # next_num = max(prefixes, default=0) + 1        # default=0 handles no experiments yet
-next_tag = f"{experiment_number:03d}"                   # zero-pad to 3 digits
-
-# 4) compose the folder name and create it
+next_tag = f"{experiment_number:03d}"            
 experiment_folder = f"{next_tag}_{model_name}_{experiment_name}_seed{random_seed}_real_perc{real_percentage}"
 experiment_path   = base_dir / experiment_folder
 experiment_path.mkdir(exist_ok=False)          # error if duplicate
@@ -124,38 +112,12 @@ eval_tf = T.Compose([
     T.Normalize(mean=[0.5], std=[0.5]),
 ])
 
-
-
-
 # Load the dataset with transformations applied
 # ------------- paths -------------
 real_path  = os.path.join(root_dir, data_dir)
 synth_path = os.path.join(root_dir, synth_data_dir)
 
 print(f"Loading data from:\n  • {real_path}\n  • {synth_path}")
-
-# ------------- choose dataset(s) -------------
-# if real_percentage == 1.0:
-#     dataset = NiftiDataset(full_data_path=real_path, transform=transform)
-#     n_real, n_synth = len(dataset), 0
-
-# elif real_percentage == 0.0:
-#     dataset = NiftiDataset(full_data_path=synth_path, transform=transform)
-#     n_real, n_synth = 0, len(dataset)
-
-# else:
-#     real_ds  = NiftiDataset(full_data_path=real_path,  transform=transform)
-#     synth_ds = NiftiDataset(full_data_path=synth_path, transform=transform)
-
-#     dataset = stratified_real_synth_mix(real_ds, synth_ds,
-#                                         real_fraction=real_percentage,
-#                                         seed=random_seed)
-
-#     # The mix returns ConcatDataset([real_subset, synth_subset])
-#     n_real  = len(dataset.datasets[0])
-#     n_synth = len(dataset.datasets[1])
-
-# ---------- get data labels once ----------
 real_ds  = NiftiDataset(real_path,  train_tf)
 synth_ds = NiftiDataset(synth_path, train_tf)   # augments OK on synth
 val_ds   = NiftiDataset(real_path,  eval_tf)

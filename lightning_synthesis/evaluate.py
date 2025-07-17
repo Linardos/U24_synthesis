@@ -40,7 +40,6 @@ elif config["num_classes"] == 4:
                 "048_resnet50_four_class_pretrainedImagenet_frozenlayers_seed44_real_perc1.0/"
                 "checkpoints/best_resnet50_fold5.pt")
                
-
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 
 root = Path("/home/locolinux2/U24_synthesis/lightning_synthesis/experiments")
@@ -59,141 +58,10 @@ ckpt = "120_DDPM_binary_21perepoch_12vs56/checkpoints/epoch=19-step=1740.ckpt" #
 ckpt = "123_DDPM_binary_11_5perepoch_12vs56/checkpoints/epoch=20-step=1512.ckpt" # 
 ckpt = "124_DDPM_binary_11perepoch_12vs56/checkpoints/epoch=26-step=1566.ckpt"
 ckpt = "140_DDPM_augmentationsgeometric_binary_11perepoch_12vs56/checkpoints/epoch=26-step=1566.ckpt" # AUGMENTATIONS ARE AWESOME! 1:1
-ckpt = "141_DDPM_augmentationsgeometric_binary_11_5perepoch_12vs56/checkpoints/epoch=20-step=1512.ckpt" # augmentations, but 1.5:1
-ckpt = "142_DDPM_augmentationsall_binary_11perepoch_12vs56/checkpoints/epoch=21-step=1276.ckpt"
-ckpt = "143_DDPM_augmentationsgeometric_binary_31fixed_12vs56/checkpoints/epoch=10-step=957.ckpt" # just a test for some metrics
+# ckpt = "141_DDPM_augmentationsgeometric_binary_11_5perepoch_12vs56/checkpoints/epoch=20-step=1512.ckpt" # augmentations, but 1.5:1
+# ckpt = "142_DDPM_augmentationsall_binary_11perepoch_12vs56/checkpoints/epoch=21-step=1276.ckpt"
+# ckpt = "143_DDPM_augmentationsgeometric_binary_31fixed_12vs56/checkpoints/epoch=10-step=957.ckpt" # just a test for some metrics
 CKPT_PATH = root / ckpt
-"""
-experiment 140 # binary, 1:1 epoch-wise, 12 vs 56, geometric augs
---
-experiment 124 # binary, 1:1 epoch-wise, 12 vs 56
---
-experiment 123 # binary, 1.5:1 epoch-wise, 12 vs 56
---
-experiment 121 # binary, 2:1 fixed matching, 12 vs 56
---
-experiment 120 # binary, 2:1 epoch-wise, 12 vs 56
---
-experiment 113 # binary, 1:1 (balanced) epoch-wise, 12 vs 6
---
-experiment 106 # binary
---
-experiment 107 # 4 class
-
-GS @ 0
-FID : {'benign': '3.11', 'malignant': '3.97', 'mean': '3.54', 'global': '3.45', 'bcfid': '0.01'}
-Oracle ACC : {'benign': '0.950', 'malignant': '0.060', 'mean': '0.505'}
---
-FID : {'benign': '1.94', 'malignant': '2.51', 'mean': '2.23', 'global': '2.12', 'bcfid': '0.04'}
-Oracle ACC : {'benign': '0.890', 'malignant': '0.120', 'mean': '0.505'}
---
-FID : {'benign': '0.78', 'malignant': '1.13', 'mean': '0.96', 'global': '0.85', 'bcfid': '0.01'}
-Oracle ACC : {'benign': '0.690', 'malignant': '0.330', 'mean': '0.510'}
---
-FID : {'benign': '5.73', 'malignant': '6.13', 'mean': '5.93', 'global': '5.89', 'bcfid': '0.01'}
-Oracle ACC : {'benign': '0.750', 'malignant': '0.310', 'mean': '0.530'}
---
-FID : {'benign': '1.41', 'malignant': '1.44', 'mean': '1.42', 'global': '1.38', 'bcfid': '0.01'}
-Oracle ACC : {'benign': '0.860', 'malignant': '0.250', 'mean': '0.555'}
---
-FID : {'benign': '2.57', 'malignant': '2.85', 'mean': '2.71', 'global': '2.64', 'bcfid': '0.00'}
-Oracle ACC : {'benign': '0.240', 'malignant': '0.665', 'mean': '0.453'}
---
-FID : {'benign': '0.80', 'malignant': '1.04', 'mean': '0.92', 'global': '0.82', 'bcfid': '0.01'}
-Oracle ACC : {'benign': '0.670', 'malignant': '0.230', 'mean': '0.450'}
---
-FID : {'benign': '0.66', 'malignant': '1.01', 'probably_benign': '0.47', 'suspicious': '0.67', 'mean': '0.70', 'global': '0.60', 'bcfid': '0.04'}
-Oracle ACC : {'benign': '0.250', 'malignant': '0.050', 'probably_benign': '0.490', 'suspicious': '0.230', 'mean': '0.255'}
-
-GS @ 4
-FID : {'benign': '4.07', 'malignant': '3.45', 'mean': '3.76', 'global': '3.51', 'bcfid': '0.58'}
-Oracle ACC : {'benign': '0.950', 'malignant': '0.300', 'mean': '0.625'}
---
-FID : {'benign': '2.34', 'malignant': '2.14', 'mean': '2.24', 'global': '2.12', 'bcfid': '0.42'}
-Oracle ACC : {'benign': '0.960', 'malignant': '0.220', 'mean': '0.590'}
---
-FID : {'benign': '1.41', 'malignant': '0.54', 'mean': '0.97', 'global': '0.47', 'bcfid': '2.01'}
-Oracle ACC : {'benign': '0.770', 'malignant': '0.540', 'mean': '0.655'}
---
-FID : {'benign': '3.23', 'malignant': '2.55', 'mean': '2.89', 'global': '2.86', 'bcfid': '0.09'}
-Oracle ACC : {'benign': '0.680', 'malignant': '0.530', 'mean': '0.605'}
---
-FID : {'benign': '1.66', 'malignant': '2.16', 'mean': '1.91', 'global': '1.84', 'bcfid': '0.12'}
-Oracle ACC : {'benign': '0.750', 'malignant': '0.650', 'mean': '0.700'}
---
-FID : {'benign': '2.58', 'malignant': '3.64', 'mean': '3.11', 'global': '2.98', 'bcfid': '0.03'}
-Oracle ACC : {'benign': '0.235', 'malignant': '0.860', 'mean': '0.547'}
---
-FID : {'benign': '1.03', 'malignant': '0.71', 'mean': '0.87', 'global': '0.78', 'bcfid': '0.19'}
-Oracle ACC : {'benign': '0.720', 'malignant': '0.280', 'mean': '0.500'}
---
-FID : {'benign': '1.05', 'malignant': '0.89', 'probably_benign': '0.95', 'suspicious': '1.28', 'mean': '1.04', 'global': '0.89', 'bcfid': '0.21'}
-Oracle ACC : {'benign': '0.180', 'malignant': '0.100', 'probably_benign': '0.370', 'suspicious': '0.350', 'mean': '0.250'}
-
-
-GS @ 7
-FID : {'benign': '6.46', 'malignant': '5.38', 'mean': '5.92', 'global': '5.34', 'bcfid': '1.81'}
-Oracle ACC : {'benign': '0.810', 'malignant': '0.680', 'mean': '0.745'}
---
-FID : {'benign': '2.79', 'malignant': '1.99', 'mean': '2.39', 'global': '2.18', 'bcfid': '0.73'}
-Oracle ACC : {'benign': '0.960', 'malignant': '0.540', 'mean': '0.750'}
---
-FID : {'benign': '2.04', 'malignant': '1.20', 'mean': '1.62', 'global': '0.83', 'bcfid': '3.47'}
-Oracle ACC : {'benign': '0.670', 'malignant': '0.840', 'mean': '0.755'}
---
-FID : {'benign': '2.25', 'malignant': '1.31', 'mean': '1.78', 'global': '1.72', 'bcfid': '0.14'}
-Oracle ACC : {'benign': '0.570', 'malignant': '0.680', 'mean': '0.625'}
---
-FID : {'benign': '1.54', 'malignant': '2.91', 'mean': '2.23', 'global': '1.96', 'bcfid': '0.44'}
-Oracle ACC : {'benign': '0.510', 'malignant': '0.920', 'mean': '0.715'}
---
-FID : {'benign': '2.94', 'malignant': '3.47', 'mean': '3.20', 'global': '3.14', 'bcfid': '0.06'}
-Oracle ACC : {'benign': '0.190', 'malignant': '0.960', 'mean': '0.575'}
---
-FID : {'benign': '1.30', 'malignant': '0.73', 'mean': '1.02', 'global': '0.75', 'bcfid': '0.65'}
-Oracle ACC : {'benign': '0.810', 'malignant': '0.510', 'mean': '0.660'}
---
-FID : {'benign': '1.04', 'malignant': '1.20', 'probably_benign': '1.87', 'suspicious': '2.24', 'mean': '1.59', 'global': '1.31', 'bcfid': '0.44'}
-Oracle ACC : {'benign': '0.140', 'malignant': '0.180', 'probably_benign': '0.430', 'suspicious': '0.490', 'mean': '0.310'}
-
-GS @ 8
-FID : {'benign': '7.95', 'malignant': '7.46', 'mean': '7.71', 'global': '7.00', 'bcfid': '1.93'}
-Oracle ACC : {'benign': '0.810', 'malignant': '0.870', 'mean': '0.840'}
---
-FID : {'benign': '3.04', 'malignant': '2.32', 'mean': '2.68', 'global': '2.43', 'bcfid': '0.83'}
-Oracle ACC : {'benign': '0.940', 'malignant': '0.620', 'mean': '0.780'}
---
-FID : {'benign': '2.63', 'malignant': '1.50', 'mean': '2.06', 'global': '1.15', 'bcfid': '4.06'}
-Oracle ACC : {'benign': '0.630', 'malignant': '0.890', 'mean': '0.760'}
---
-FID : {'benign': '2.30', 'malignant': '1.41', 'mean': '1.85', 'global': '1.78', 'bcfid': '0.16'}
-Oracle ACC : {'benign': '0.670', 'malignant': '0.780', 'mean': '0.725'}
---
-FID : {'benign': '1.68', 'malignant': '3.16', 'mean': '2.42', 'global': '2.11', 'bcfid': '0.49'}
-Oracle ACC : {'benign': '0.360', 'malignant': '0.910', 'mean': '0.635'}
---
-FID : {'benign': '3.11', 'malignant': '3.42', 'mean': '3.27', 'global': '3.22', 'bcfid': '0.06'}
-Oracle ACC : {'benign': '0.230', 'malignant': '0.970', 'mean': '0.600'}
---
-FID : {'benign': '1.13', 'malignant': '0.91', 'mean': '1.02', 'global': '0.73', 'bcfid': '0.67'}
-Oracle ACC : {'benign': '0.840', 'malignant': '0.600', 'mean': '0.720'}
---
-FID : {'benign': '1.20', 'malignant': '1.44', 'probably_benign': '1.83', 'suspicious': '2.11', 'mean': '1.64', 'global': '1.46', 'bcfid': '0.30'}
-Oracle ACC : {'benign': '0.220', 'malignant': '0.120', 'probably_benign': '0.360', 'suspicious': '0.530', 'mean': '0.307'}
-
-GS @ 9
---
---
---
---
---
---
-FID : {'benign': '1.74', 'malignant': '1.06', 'mean': '1.40', 'global': '0.96', 'bcfid': '1.05'}
-Oracle ACC : {'benign': '0.780', 'malignant': '0.600', 'mean': '0.690'}
---
-FID : {'benign': '0.70', 'malignant': '1.56', 'probably_benign': '2.40', 'suspicious': '2.53', 'mean': '1.80', 'global': '1.46', 'bcfid': '0.49'}
-Oracle ACC : {'benign': '0.280', 'malignant': '0.140', 'probably_benign': '0.350', 'suspicious': '0.560', 'mean': '0.333'}
-"""
 
 # CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/094_DDPM_MS-SSIM_10perc_HF_5perc_val/checkpoints/epoch=12-step=1690.ckpt" # ACTUAL GOLD
 
@@ -202,15 +70,19 @@ NAME_TAG = f"{ckpt[:4]}"
 
 RESOLUTION = 256
 BATCH      = 8
-N_EVAL     = 100                       # samples / class
-SCALES     = [7,8] #,9,10, 0,4]#[0, 4, 7, 8]
+N_EVAL     = 300                       # samples / class
+SCALES     = [0,4,7,8,9] #,9,10, 0,4]#[0, 4, 7, 8]
+EVAL_SET = 'test'
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch.manual_seed(42); random.seed(42); np.random.seed(42)
 
 # ── DATASET ───────────────────────────────────────────────────────────────────
 
-root_dir = "/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train/original"
+if EVAL_SET == 'test':
+    root_dir = "/mnt/d/Datasets/EMBED/EMBED_binary_12vs56_256x256/test_balanced"
+else:
+    root_dir = "/mnt/d/Datasets/EMBED/EMBED_binary_12vs56_256x256/train/original"
 
 categories = ["benign", "malignant"]
 if config["num_classes"] >= 3:   categories.append("probably_benign")
@@ -248,10 +120,19 @@ real_tf = mt.Compose([
 full_ds  = NiftiSynthesisDataset(root_dir, transform=real_tf)
 
 # ---------- reproducible 10 % val split then 128-per-class subset ----------
-g = torch.Generator().manual_seed(42)
-val_len  = int(len(full_ds) * 0.1)
-train_len = len(full_ds) - val_len
-_, val_ds = torch.utils.data.random_split(full_ds, [train_len, val_len], generator=g)
+if EVAL_SET=='val':
+    # Folder that contains best.pt and indices.json (adjust if needed)
+    TRAIN_EXP_DIR = "/home/locolinux2/U24_synthesis/experiments/062_resnet50_binary_12vs56_seed44_real_perc1.0"
+
+    with open(os.path.join(TRAIN_EXP_DIR, "indices_fold3.json")) as jf:
+        idx_dict = json.load(jf)
+    val_idx = np.asarray(idx_dict["val_real"], dtype=int)     # same order as real_ds
+    val_ds = Subset(full_ds, val_idx) 
+else:
+    g = torch.Generator().manual_seed(42)
+    val_len  = int(len(full_ds) * 0.1)
+    train_len = len(full_ds) - val_len
+    _, val_ds = torch.utils.data.random_split(full_ds, [train_len, val_len], generator=g)
 
 # build class-specific index lists
 idx_by_class = {c: [] for c in categories}
@@ -351,7 +232,7 @@ for gs in SCALES:
 # ── LOGGING ───────────────────────────────────────────────────────────────
 ts = datetime.now().strftime("%Y%m%d_%H%M%S")
 os.makedirs("logs", exist_ok=True)
-csv_path = f"logs/{NAME_TAG}_metrics_{ts}.csv"
+csv_path = f"logs/{NAME_TAG}{EVAL_SET}_metrics_{ts}.csv"
 
 header = (["Guidance",
            "FID_global", "FID_bcfid",

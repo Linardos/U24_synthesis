@@ -2,7 +2,7 @@ import os
 import shutil
 import random
 
-source_folder = '/mnt/c/Datasets/CMMD/CMMD_clean'
+source_folder = '/mnt/d/Datasets/CMMD/CMMD_clean_256x256'
 train_folder = os.path.join(source_folder, 'train')
 test_folder = os.path.join(source_folder, 'test')
 
