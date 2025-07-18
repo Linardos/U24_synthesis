@@ -62,13 +62,16 @@ no_improvement_epochs = 0
 
 # Store the config.yaml file in the current experiment folder
 # ── EXPERIMENT FOLDER ──────────────────────────────────────────────────────────
-
+dataset_tag = Path(root_dir).parts[-3]      # -> 'EMBED' / 'CMMD'
 base_dir = Path("experiments")
 base_dir.mkdir(exist_ok=True)
 
 # next_num = max(prefixes, default=0) + 1        # default=0 handles no experiments yet
 next_tag = f"{experiment_number:03d}"            
-experiment_folder = f"{next_tag}_{model_name}_{experiment_name}_seed{random_seed}_real_perc{real_percentage}"
+experiment_folder = (
+    f"{next_tag}_{dataset_tag}_{config['model_name']}_"
+    f"{config['experiment_name']}_seed{random_seed}_real_perc{real_percentage}"
+)
 experiment_path   = base_dir / experiment_folder
 experiment_path.mkdir(exist_ok=False)          # error if duplicate
 

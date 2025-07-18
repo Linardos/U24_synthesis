@@ -34,13 +34,18 @@ class BasicSynthesisDataset(Dataset):
 # ── DataModule with adjustable benign:malignant ratio ───────────────────────
 class BalancedSamplingDataModule(pl.LightningDataModule):
     """
-    Draws <ratio>× as many benign as malignant each epoch.
+    Each epoch returns  (ratio × N_minority)  samples of the majority class
+    plus all N_minority samples of the minority class.
 
-    • Loads *all* malignant and benign paths once in `setup`.
-    • At every call to `train_dataloader`, samples a fresh benign subset
-      of size  ratio * len(malignant)  (no replacement), merges, shuffles,
-      and returns a DataLoader.
-    • Set Trainer(reload_dataloaders_every_n_epochs=1).
+    Works no matter which label has more files.
+
+    Parameters
+    ----------
+    full_data_path : str
+        root/ └─ benign/…  malignant/…
+    ratio : float
+        1.0 → perfectly balanced (1 : 1)  
+        2.0 → majority twice as frequent as minority (1 : 2)
     """
 
     def __init__(
@@ -49,7 +54,7 @@ class BalancedSamplingDataModule(pl.LightningDataModule):
         batch_size: int,
         transform=None,
         num_workers: int = 8,
-        ratio: float = 1.0,                # 1.0 → 1 : 1, 2.0 → 2 : 1 …
+        ratio: float = 1.0,
     ):
         super().__init__()
         self.full_data_path = Path(full_data_path)
@@ -58,38 +63,65 @@ class BalancedSamplingDataModule(pl.LightningDataModule):
         self.num_workers    = num_workers
         self.ratio          = ratio
 
-        self.benign_pool       = []
-        self.malignant_samples = []
+        # will be filled in setup()
+        self.buckets = {}            # {"benign": [(path,label), …], "malignant":[…]}
+        self.minority_key  = None
+        self.majority_key  = None
 
-    # called once per rank
+    # ---------------------------------------------------------
+    #  SETUP
+    # ---------------------------------------------------------
     def setup(self, stage=None):
-        buckets = defaultdict(list)
-        for cls in ["benign", "malignant"]:
+        # 1. scan folders into buckets
+        for cls, label in [("benign", 0), ("malignant", 1)]:
             cls_dir = self.full_data_path / cls
-            if not cls_dir.exists(): continue
-            label = 0 if cls == "benign" else 1
-            for sub in cls_dir.iterdir():
-                nii_files = [f for f in sub.iterdir() if f.name.endswith(".nii.gz")]
-                if nii_files:
-                    buckets[cls].append((str(nii_files[0]), label))
+            if not cls_dir.exists():
+                continue
+            paths = [
+                (str(f), label)
+                for subj in cls_dir.iterdir()
+                for f in subj.glob("*.nii.gz")
+            ]
+            self.buckets[cls] = paths
 
-        self.malignant_samples = buckets["malignant"]
-        self.benign_pool       = buckets["benign"]
+        if len(self.buckets) < 2:
+            raise RuntimeError("Need both benign and malignant folders present.")
 
-        if not self.malignant_samples:
-            raise RuntimeError("No malignant samples found!")
-        need = int(self.ratio * len(self.malignant_samples))
-        if len(self.benign_pool) < need:
+        # 2. decide minority / majority
+        if len(self.buckets["benign"]) <= len(self.buckets["malignant"]):
+            self.minority_key  = "benign"
+            self.majority_key  = "malignant"
+        else:
+            self.minority_key  = "malignant"
+            self.majority_key  = "benign"
+
+        minority_n  = len(self.buckets[self.minority_key])
+        majority_n  = len(self.buckets[self.majority_key])
+        needed      = int(self.ratio * minority_n)
+
+        if majority_n < needed:
             raise RuntimeError(
-                f"Ratio {self.ratio} requires {need} benign images, "
-                f"but pool has only {len(self.benign_pool)}."
+                f"ratio={self.ratio} needs {needed} {self.majority_key} images "
+                f"but only {majority_n} available."
             )
 
-    # helper per epoch
+        print(
+            f"BalancedSampling - minority={self.minority_key}({minority_n})  "
+            f"majority={self.majority_key}({majority_n})  "
+            f"→ each epoch uses {minority_n + needed} samples "
+            f"({self.ratio} : 1 balance)."
+        )
+
+    # ---------------------------------------------------------
+    #  make a fresh dataset each epoch
+    # ---------------------------------------------------------
     def _make_dataset(self):
-        need = int(self.ratio * len(self.malignant_samples))
-        benign_subset = random.sample(self.benign_pool, k=need)
-        samples = benign_subset + self.malignant_samples
+        minority   = self.buckets[self.minority_key]
+        majority   = self.buckets[self.majority_key]
+        need_major = int(self.ratio * len(minority))
+        majority_subset = random.sample(majority, k=need_major)
+
+        samples = majority_subset + minority
         random.shuffle(samples)
         return BasicSynthesisDataset(samples, transform=self.transform)
 
@@ -103,6 +135,78 @@ class BalancedSamplingDataModule(pl.LightningDataModule):
             pin_memory=True,
             persistent_workers=False,
         )
+
+# class BalancedSamplingDataModule(pl.LightningDataModule):
+#     """
+#     Draws <ratio>× as many benign as malignant each epoch.
+
+#     • Loads *all* malignant and benign paths once in `setup`.
+#     • At every call to `train_dataloader`, samples a fresh benign subset
+#       of size  ratio * len(malignant)  (no replacement), merges, shuffles,
+#       and returns a DataLoader.
+#     • Set Trainer(reload_dataloaders_every_n_epochs=1).
+#     """
+
+#     def __init__(
+#         self,
+#         full_data_path: str,
+#         batch_size: int,
+#         transform=None,
+#         num_workers: int = 8,
+#         ratio: float = 1.0,                # 1.0 → 1 : 1, 2.0 → 2 : 1 …
+#     ):
+#         super().__init__()
+#         self.full_data_path = Path(full_data_path)
+#         self.batch_size     = batch_size
+#         self.transform      = transform
+#         self.num_workers    = num_workers
+#         self.ratio          = ratio
+
+#         self.benign_pool       = []
+#         self.malignant_samples = []
+
+#     # called once per rank
+#     def setup(self, stage=None):
+#         buckets = defaultdict(list)
+#         for cls in ["benign", "malignant"]:
+#             cls_dir = self.full_data_path / cls
+#             if not cls_dir.exists(): continue
+#             label = 0 if cls == "benign" else 1
+#             for sub in cls_dir.iterdir():
+#                 nii_files = [f for f in sub.iterdir() if f.name.endswith(".nii.gz")]
+#                 if nii_files:
+#                     buckets[cls].append((str(nii_files[0]), label))
+
+#         self.malignant_samples = buckets["malignant"]
+#         self.benign_pool       = buckets["benign"]
+
+#         if not self.malignant_samples:
+#             raise RuntimeError("No malignant samples found!")
+#         need = int(self.ratio * len(self.malignant_samples))
+#         if len(self.benign_pool) < need:
+#             raise RuntimeError(
+#                 f"Ratio {self.ratio} requires {need} benign images, "
+#                 f"but pool has only {len(self.benign_pool)}."
+#             )
+
+#     # helper per epoch
+#     def _make_dataset(self):
+#         need = int(self.ratio * len(self.malignant_samples))
+#         benign_subset = random.sample(self.benign_pool, k=need)
+#         samples = benign_subset + self.malignant_samples
+#         random.shuffle(samples)
+#         return BasicSynthesisDataset(samples, transform=self.transform)
+
+#     def train_dataloader(self):
+#         ds = self._make_dataset()
+#         return DataLoader(
+#             ds,
+#             batch_size=self.batch_size,
+#             shuffle=True,
+#             num_workers=self.num_workers,
+#             pin_memory=True,
+#             persistent_workers=False,
+#         )
 
 # Original one used:
 class NiftiSynthesisDataset(Dataset):

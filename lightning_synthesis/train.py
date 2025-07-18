@@ -36,6 +36,9 @@ base_dir = Path("experiments")
 base_dir.mkdir(exist_ok=True)
 
 
+root_dir = config['root_dir']
+data_dir = config['data_dir']
+full_data_path = os.path.join(root_dir, data_dir)
 # ── EXPERIMENT FOLDER ──────────────────────────────────────────────────────────
 # Get existing experiment directories and find the highest prefix
 existing = [
@@ -60,9 +63,10 @@ if exp_dir_manual.exists():
     experiment_path = exp_dir_manual
 else:
     # create a new experiment and copy current set up
+    dataset_tag = Path(root_dir).parts[-3]      # -> 'EMBED' / 'CMMD'
     existing = [d for d in base_dir.iterdir() if d.is_dir() and d.name[:3].isdigit()]
     next_num = (max(int(d.name[:3]) for d in existing) + 1) if existing else 1
-    experiment_name = f"{next_num:03d}_{config['model']}_augmentations{config['augmentations']}_{cfg_exp_name}"
+    experiment_name = f"{next_num:03d}_{dataset_tag}_{config['model']}_augmentations{config['augmentations']}_{cfg_exp_name}"
     experiment_path = base_dir / experiment_name
     experiment_path.mkdir(exist_ok=True)
     
@@ -91,9 +95,6 @@ else:
 # ----------------------------------------------------------------------
 
 # Define the data path directory
-root_dir = config['root_dir']
-data_dir = config['data_dir']
-full_data_path = os.path.join(root_dir, data_dir)
 
 # UNCOMMENT FOR MNIST SANITY CHECK ====
 # from torchvision import datasets

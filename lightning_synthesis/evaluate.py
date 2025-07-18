@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #  evaluate.py – per-class and overall FID / Oracle Acc on the held-out val split
 # ─────────────────────────────────────────────────────────────────────────────
-import os, csv, random, yaml
+import os, csv, random, yaml, json
 from datetime import datetime
 from itertools import combinations
 import numpy as np
@@ -28,18 +28,7 @@ from torchvision.transforms import Normalize               # oracle preprocessin
 with open("config_l.yaml") as f:
     config = yaml.safe_load(f)
 
-if config["num_classes"] == 2:
-    ORACLE_CKPT = ("/home/locolinux2/U24_synthesis/experiments/"
-                "062_resnet50_binary_12vs56_seed44_real_perc1.0/"
-                "checkpoints/best_resnet50_fold3.pt")
-    # ORACLE_CKPT = ("/home/locolinux2/U24_synthesis/experiments/"
-    #             "055_resnet50_binary_classification_seed44_real_perc1.0/"
-    #             "checkpoints/best_resnet50_fold5.pt")
-elif config["num_classes"] == 4:
-    ORACLE_CKPT = ("/home/locolinux2/U24_synthesis/experiments/"
-                "048_resnet50_four_class_pretrainedImagenet_frozenlayers_seed44_real_perc1.0/"
-                "checkpoints/best_resnet50_fold5.pt")
-               
+
 # ── CONFIG ────────────────────────────────────────────────────────────────────
 
 root = Path("/home/locolinux2/U24_synthesis/lightning_synthesis/experiments")
@@ -61,6 +50,8 @@ ckpt = "140_DDPM_augmentationsgeometric_binary_11perepoch_12vs56/checkpoints/epo
 # ckpt = "141_DDPM_augmentationsgeometric_binary_11_5perepoch_12vs56/checkpoints/epoch=20-step=1512.ckpt" # augmentations, but 1.5:1
 # ckpt = "142_DDPM_augmentationsall_binary_11perepoch_12vs56/checkpoints/epoch=21-step=1276.ckpt"
 # ckpt = "143_DDPM_augmentationsgeometric_binary_31fixed_12vs56/checkpoints/epoch=10-step=957.ckpt" # just a test for some metrics
+ckpt = "144_CMMD_DDPM_augmentationsgeometric_binary_13fixed_12vs56/checkpoints/epoch=12-step=962.ckpt"
+ckpt = "145_CMMD_DDPM_augmentationsNone_binary_11balancing_12vs56/checkpoints/epoch=29-step=990.ckpt"
 CKPT_PATH = root / ckpt
 
 # CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/094_DDPM_MS-SSIM_10perc_HF_5perc_val/checkpoints/epoch=12-step=1690.ckpt" # ACTUAL GOLD
@@ -70,19 +61,29 @@ NAME_TAG = f"{ckpt[:4]}"
 
 RESOLUTION = 256
 BATCH      = 8
-N_EVAL     = 300                       # samples / class
+N_EVAL     = 200                       # samples / class
 SCALES     = [0,4,7,8,9] #,9,10, 0,4]#[0, 4, 7, 8]
-EVAL_SET = 'test'
+EVAL_SET = 'val'
+ORACLE_DIR  = "072_resnet50_CMMD_binary_12vs56_seed44_real_perc1.0" # "062_resnet50_binary_12vs56_seed44_real_perc1.0"
+DATASET = 'CMMD' # CMMD or EMBED
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch.manual_seed(42); random.seed(42); np.random.seed(42)
 
+if config["num_classes"] == 2:
+    ORACLE_CKPT = ("/home/locolinux2/U24_synthesis/experiments/"
+                f"{ORACLE_DIR}/"
+                "checkpoints/best_resnet50_fold3.pt")
+    # ORACLE_CKPT = ("/home/locolinux2/U24_synthesis/experiments/"
+    #             "055_resnet50_binary_classification_seed44_real_perc1.0/"
+    #             "checkpoints/best_resnet50_fold5.pt")
+elif config["num_classes"] == 4:
+    ORACLE_CKPT = ("/home/locolinux2/U24_synthesis/experiments/"
+                "048_resnet50_four_class_pretrainedImagenet_frozenlayers_seed44_real_perc1.0/"
+                "checkpoints/best_resnet50_fold5.pt")
+               
 # ── DATASET ───────────────────────────────────────────────────────────────────
-
-if EVAL_SET == 'test':
-    root_dir = "/mnt/d/Datasets/EMBED/EMBED_binary_12vs56_256x256/test_balanced"
-else:
-    root_dir = "/mnt/d/Datasets/EMBED/EMBED_binary_12vs56_256x256/train/original"
+root_dir = f"/mnt/d/Datasets/{DATASET}/{DATASET}_binary_256x256/train/original"
 
 categories = ["benign", "malignant"]
 if config["num_classes"] >= 3:   categories.append("probably_benign")
@@ -122,7 +123,7 @@ full_ds  = NiftiSynthesisDataset(root_dir, transform=real_tf)
 # ---------- reproducible 10 % val split then 128-per-class subset ----------
 if EVAL_SET=='val':
     # Folder that contains best.pt and indices.json (adjust if needed)
-    TRAIN_EXP_DIR = "/home/locolinux2/U24_synthesis/experiments/062_resnet50_binary_12vs56_seed44_real_perc1.0"
+    TRAIN_EXP_DIR = f"/home/locolinux2/U24_synthesis/experiments/{ORACLE_DIR}"
 
     with open(os.path.join(TRAIN_EXP_DIR, "indices_fold3.json")) as jf:
         idx_dict = json.load(jf)

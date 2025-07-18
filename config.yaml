@@ -5,8 +5,8 @@
 # root_dir: '/mnt/d/Datasets/SanityInBreast_train'
 # root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train'
 # root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_256x256_binary/train'
-root_dir: '/mnt/d/Datasets/EMBED/EMBED_binary_12vs56_256x256/train'
-# root_dir: '/mnt/d/Datasets/CMMD/CMMD_clean_256x256/train'
+root_dir: '/mnt/d/Datasets/EMBED/EMBED_binary_256x256/train'
+# root_dir: '/mnt/d/Datasets/CMMD/CMMD_binary_256x256/train'
 data_dir: 'original' #'original' # 'stylegan_256x256', 'vqvae' , 'original'
 synth_data_dir: 'synthetic_guide8.0'
 real_percentage: 1.0 # use 0 for full synthetic, use 0.25, 0.5, 0.75 for mix
