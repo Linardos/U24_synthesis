@@ -64,7 +64,10 @@ BATCH      = 8
 N_EVAL     = 200                       # samples / class
 SCALES     = [0,4,7,8,9] #,9,10, 0,4]#[0, 4, 7, 8]
 EVAL_SET = 'val'
-ORACLE_DIR  = "072_resnet50_CMMD_binary_12vs56_seed44_real_perc1.0" # "062_resnet50_binary_12vs56_seed44_real_perc1.0"
+# ORACLE_DIR  = "072_resnet50_CMMD_binary_12vs56_seed44_real_perc1.0" # "062_resnet50_binary_12vs56_seed44_real_perc1.0"
+ORACLE_DIR  = "073_resnet50_CMMD_balanced_binary_12vs56_seed44_real_perc1.0"
+ORACLE_DIR  = "074_CMMD_binary_256x256_resnet50_EMBED_binary_12vs56_dynamic11_seed44_real_perc1.0"
+ORACLE_DIR  = "075_CMMD_binary_256x256_resnet50_EMBED_binary_12vs56_dynamic21_seed44_real_perc1.0"
 DATASET = 'CMMD' # CMMD or EMBED
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -73,10 +76,7 @@ torch.manual_seed(42); random.seed(42); np.random.seed(42)
 if config["num_classes"] == 2:
     ORACLE_CKPT = ("/home/locolinux2/U24_synthesis/experiments/"
                 f"{ORACLE_DIR}/"
-                "checkpoints/best_resnet50_fold3.pt")
-    # ORACLE_CKPT = ("/home/locolinux2/U24_synthesis/experiments/"
-    #             "055_resnet50_binary_classification_seed44_real_perc1.0/"
-    #             "checkpoints/best_resnet50_fold5.pt")
+                "checkpoints/best_resnet50_fold5.pt")
 elif config["num_classes"] == 4:
     ORACLE_CKPT = ("/home/locolinux2/U24_synthesis/experiments/"
                 "048_resnet50_four_class_pretrainedImagenet_frozenlayers_seed44_real_perc1.0/"
@@ -89,6 +89,58 @@ categories = ["benign", "malignant"]
 if config["num_classes"] >= 3:   categories.append("probably_benign")
 if config["num_classes"] == 4:   categories.append("suspicious")
 num_classes = len(categories)     # <-- used by oracle
+# ── caching ─────────────────────────────────────────────────────────────
+CACHE_SYNTH   = True                     # flip off if you really want fresh draws
+CACHE_ROOT    = Path(f"/mnt/d/Datasets/{DATASET}/synth_cache")      # anything inside .gitignore
+ckpt_tag      = CKPT_PATH.parent.name    # e.g. 140_DDPM_augmentationsgeometric…
+def load_or_generate(model, label_id, class_name, scale, n):
+    save_dir  = CACHE_ROOT / ckpt_tag / f"gs{scale}"
+    save_dir.mkdir(parents=True, exist_ok=True)
+    save_file = save_dir / f"{class_name}.pt"
+
+    # 1) already cached?
+    if save_file.exists():
+        imgs = torch.load(save_file, map_location="cpu")
+        cur  = imgs.shape[0]
+
+        if cur >= n:                       # we have enough — trim if asked for less
+            return imgs[:n]
+
+        # need to generate the *missing* part
+        missing, bank = n - cur, []
+        with torch.no_grad(), torch.autocast("cuda", torch.float16):
+            while missing:
+                k = min(BATCH, missing)
+                bank.append(
+                    model.sample(label=label_id,
+                                 N=k,
+                                 size=RESOLUTION,
+                                 guidance_scale=scale).cpu()
+                )
+                missing -= k
+
+        imgs = torch.cat([imgs] + bank, dim=0)  # (n,1,H,W)
+        torch.save(imgs, save_file)             # overwrite with the larger set
+        return imgs
+
+    # 2) file didn’t exist → create it from scratch
+    bank, remaining = [], n
+    with torch.no_grad(), torch.autocast("cuda", torch.float16):
+        while remaining:
+            k = min(BATCH, remaining)
+            bank.append(
+                model.sample(label=label_id,
+                             N=k,
+                             size=RESOLUTION,
+                             guidance_scale=scale).cpu()
+            )
+            remaining -= k
+
+    imgs = torch.cat(bank, dim=0)
+    torch.save(imgs, save_file)
+    return imgs
+
+
 # ── LOAD MODEL (fp16) ─────────────────────────────────────────────────────────
 model = (MonaiDDPM
          .load_from_checkpoint(CKPT_PATH, map_location="cpu")
@@ -156,76 +208,56 @@ val_loaders = {
 to_rgb = lambda x: x.repeat(1, 3, 1, 1)              # 1-ch → 3-ch
 
 # ── METRIC HELPERS ──────────────────────────────────────────────────────────
-def metrics_for_scale(scale: int):
-    """
-    Returns:
-        fid_cls : dict with per-class, mean and global FID
-        acc_cls : dict with per-class oracle accuracy + synthetic-mean
-    """
+def metrics_for_scale(model, scale):
     fid_cls, acc_cls = {}, {}
     fid_global = FID(feature=64, normalize=True).to(device)
-    # ---- store synth images for BCFID ----------
     synth_bank = {c: [] for c in categories}
 
     for c, label_id in zip(categories, range(len(categories))):
-        label_tensor = torch.full((BATCH,), label_id, device=device, dtype=torch.long)
-
-        # ---------- FID prep ----------
+        # ── prepare “real” side ─────────────────────────────────────────
         fid = FID(feature=64, normalize=True).to(device)
         for imgs, _ in val_loaders[c]:
             fid.update(to_rgb(imgs.to(device)), real=True)
             fid_global.update(to_rgb(imgs.to(device)), real=True)
 
-        synth_remaining, correct, total = N_EVAL, 0, 0
-        with torch.no_grad(), torch.autocast("cuda", torch.float16):
-            while synth_remaining:
-                cur = min(BATCH, synth_remaining)
-                synth = model.sample(label=label_id,
-                                     N=cur, size=RESOLUTION,
-                                     guidance_scale=scale)        # (B,1,H,W)
+        # ── synthetic side (cache-aware) ────────────────────────────────
+        synth = load_or_generate(model, label_id, c, scale, N_EVAL)      # (N_EVAL,1,H,W)
+        synth_bank[c].append(synth)                               # later BCFID
 
-                # keep a copy for BCFID (on CPU to save vRAM)
-                synth_bank[c].append(synth.cpu())
+        fid.update(to_rgb(synth.to(device)), real=False)
+        fid_global.update(to_rgb(synth.to(device)), real=False)
 
-                # --- FID (class + global) ------------------------------
-                fid.update(to_rgb(synth.to(device)), real=False)
-                fid_global.update(to_rgb(synth.to(device)), real=False)
+        # oracle accuracy ------------------------------------------------
+        logits  = oracle(oracle_norm(synth.to(device)))           # (N_EVAL,C)
+        preds   = logits.argmax(dim=1)
+        correct = (preds == label_id).sum().item()
 
-                # --- Oracle accuracy -----------------------------------
-                logits = oracle(oracle_norm(synth))                # (B,C)
-                preds  = logits.argmax(dim=1)
-                correct += (preds == label_tensor[:cur]).sum().item()
-                total   += cur
+        fid_cls[c] = fid.compute().item()
+        acc_cls[c] = correct / N_EVAL
 
-                synth_remaining -= cur
-
-        fid_cls[c]  = fid.compute().item()
-        acc_cls[c]  = correct / total
-
-    # ── BCFID  (mean pair-wise FID between classes) ─────────
+    # ── BCFID (between-class FID) ───────────────────────────────────────
     bcfids = []
-    for (c1, c2) in combinations(categories, 2):
+    for c1, c2 in combinations(categories, 2):
         fid_pair = FID(feature=64, normalize=True).to(device)
-        # treat class-1 synth as "real", class-2 synth as "fake"
-        for t in synth_bank[c1]: fid_pair.update(to_rgb(t.to(device)), real=True)
-        for t in synth_bank[c2]: fid_pair.update(to_rgb(t.to(device)), real=False)
+        for t in synth_bank[c1]:
+            fid_pair.update(to_rgb(t.to(device)), real=True)
+        for t in synth_bank[c2]:
+            fid_pair.update(to_rgb(t.to(device)), real=False)
         bcfids.append(fid_pair.compute().item())
-    bcfid_mean = sum(bcfids) / len(bcfids)
+    fid_cls["bcfid"] = sum(bcfids) / len(bcfids)
 
-    # summaries
-    fid_cls["mean"]  = sum(fid_cls.values()) / len(categories)
+    # summaries ---------------------------------------------------------
     fid_cls["global"] = fid_global.compute().item()
-    fid_cls["bcfid"]  = bcfid_mean
-
-    acc_cls["mean"]  = sum(acc_cls.values()) / len(categories)
-
+    fid_cls["mean"]   = sum(fid_cls[k] for k in categories) / len(categories)
+    acc_cls["mean"]   = sum(acc_cls.values()) / len(categories)
     return fid_cls, acc_cls
+
 
 # ── SWEEP ──────────────────────────────────────────────────────────────────
 results_fid, results_acc = {}, {}
 for gs in SCALES:
     print(f"\n>>> guidance scale {gs}")
-    fid_c, acc_c = metrics_for_scale(gs)
+    fid_c, acc_c = metrics_for_scale(model, gs)
     results_fid[gs], results_acc[gs] = fid_c, acc_c
     print("FID :", {k:f"{v:.2f}" for k,v in fid_c.items()})
     print("Oracle ACC :", {k:f"{v:.3f}" for k,v in acc_c.items()})

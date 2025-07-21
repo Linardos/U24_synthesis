@@ -35,17 +35,20 @@ from models import get_model                       # noqa: E402
 SEED         = 42          # reproducibility everywhere
 RESOLUTION   = 256         # image side length (for transforms)
 BATCH        = 4           # Oracle batch size (fp16 OK)
-N_EVAL       = 100         # images sampled *per class* to evaluate
+N_EVAL       = 200         # images sampled *per class* to evaluate
 EVAL_SET = 'val'
 CONFIG_YAML  = "config_l.yaml"  # same config file as before
 ORACLE_DIR  = "072_resnet50_CMMD_binary_12vs56_seed44_real_perc1.0" # "062_resnet50_binary_12vs56_seed44_real_perc1.0"
+# ORACLE_DIR  = "073_resnet50_CMMD_balanced_binary_12vs56_seed44_real_perc1.0"
+# ORACLE_DIR  = "074_CMMD_binary_256x256_resnet50_EMBED_binary_12vs56_dynamic11_seed44_real_perc1.0"
+# ORACLE_DIR  = "075_CMMD_binary_256x256_resnet50_EMBED_binary_12vs56_dynamic21_seed44_real_perc1.0"
 DATASET     = "CMMD" # EMBED or CMMD
 
 # Paths ----------------------------------------------------------------------------------
-if EVAL_SET == 'test':
-    DATA_ROOT = f"/mnt/d/Datasets/{DATASET}/{DATASET}_binary_256x256/test"
-else:
+if EVAL_SET == 'val':
     DATA_ROOT = f"/mnt/d/Datasets/{DATASET}/{DATASET}_binary_256x256/train/original"
+elif EVAL_SET == 'test':
+    DATA_ROOT = f"/mnt/d/Datasets/{DATASET}/{DATASET}_binary_256x256/test"
 
 
 with open(CONFIG_YAML) as f:
@@ -57,8 +60,13 @@ if cfg["num_classes"] == 2:
     ORACLE_CKPT = (
         "/home/locolinux2/U24_synthesis/experiments/"
         f"{ORACLE_DIR}/"
-        "checkpoints/best_resnet50_fold3.pt"
+        "checkpoints/best_resnet50_fold5.pt"
     )
+    # ORACLE_CKPT = (
+    #     "/home/locolinux2/U24_synthesis/experiments/"
+    #     f"{ORACLE_DIR}/"
+    #     "checkpoints/best_resnet50_fold3.pt"
+    # )
 elif cfg["num_classes"] == 4:
     ORACLE_CKPT = (
         "/home/locolinux2/U24_synthesis/experiments/"
@@ -88,7 +96,7 @@ real_tf = mt.Compose([
 
 full_ds = NiftiSynthesisDataset(DATA_ROOT, transform=real_tf)
 
-# ── BUILD VALIDATION / TEST + PER‑CLASS SUBSETS ──────────────────────
+# ── BUILD HOLD OUT SET + PER‑CLASS SUBSETS ──────────────────────
 if EVAL_SET == "test":
     # evaluate on the whole test split
     val_ds = full_ds

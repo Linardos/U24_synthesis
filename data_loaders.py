@@ -1,10 +1,9 @@
 import os
-import numpy as np
-import nibabel as nib
-import torch
+import random, nibabel as nib, numpy as np, torch
 from torch.utils.data import Dataset, DataLoader, Subset, ConcatDataset
 from torchvision import transforms
 import yaml
+from pathlib import Path
 
 # Load configuration
 with open('config.yaml', 'r') as f:
@@ -76,6 +75,61 @@ class NiftiDataset(Dataset):
             img_tensor = self.transform(img_tensor)
 
         return img_tensor, label
+
+
+class _BasicDataset(Dataset):
+    def __init__(self, samples, transform=None):
+        self.samples   = samples          # list[(path,label)]
+        self.transform = transform
+
+    def __len__(self):   return len(self.samples)
+
+    def __getitem__(self, idx):
+        path, label = self.samples[idx]
+        img = torch.tensor(nib.load(path).get_fdata(), dtype=torch.float32)
+        img = img.unsqueeze(0)
+        if img.shape[-1] == 1:          # drop trailing singleton (H,W,1)
+            img = img.squeeze(-1)
+        if self.transform:
+            img = self.transform(img)
+        return img, label
+
+
+def make_balanced_loader(
+    samples,                    # list[(path,label)]
+    batch_size,
+    transform=None,
+    ratio=1.0,                  # 1 ⇒ perfectly balanced
+    num_workers=8,
+):
+    """Return a DataLoader whose underlying dataset is freshly
+    re-sampled to the desired minority/majority ratio."""
+    # ------- bucket samples by class (assumes 0/1 labels) ----------
+    buckets = {0: [], 1: []}
+    for p, lbl in samples:
+        buckets[lbl].append((p, lbl))
+
+    # figure out minority / majority
+    if len(buckets[0]) <= len(buckets[1]):
+        minority, majority = buckets[0], buckets[1]
+    else:
+        minority, majority = buckets[1], buckets[0]
+
+    need_major = int(len(minority) * ratio)
+    if need_major > len(majority):
+        raise RuntimeError(
+            f"Need {need_major} majority samples but only {len(majority)} available."
+        )
+
+    majority_subset = random.sample(majority, need_major)
+    epoch_samples   = minority + majority_subset
+    random.shuffle(epoch_samples)
+
+    ds = _BasicDataset(epoch_samples, transform)
+    return DataLoader(
+        ds, batch_size=batch_size, shuffle=True,
+        num_workers=num_workers, pin_memory=True, persistent_workers=False
+    )
 
 
 def stratified_real_synth_mix(real_ds, synth_ds, real_fraction, seed=0):

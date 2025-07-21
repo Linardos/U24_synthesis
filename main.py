@@ -17,7 +17,7 @@ from sklearn.metrics import roc_auc_score, balanced_accuracy_score, confusion_ma
 from scipy.interpolate import interp1d
 
 from models import get_model  
-from data_loaders import NiftiDataset, stratified_real_synth_mix 
+from data_loaders import NiftiDataset, stratified_real_synth_mix, make_balanced_loader 
 
 
 # Load configuration from config.yaml
@@ -62,7 +62,7 @@ no_improvement_epochs = 0
 
 # Store the config.yaml file in the current experiment folder
 # ── EXPERIMENT FOLDER ──────────────────────────────────────────────────────────
-dataset_tag = Path(root_dir).parts[-3]      # -> 'EMBED' / 'CMMD'
+dataset_tag = Path(root_dir).parts[-2]      # -> 'EMBED' / 'CMMD'
 base_dir = Path("experiments")
 base_dir.mkdir(exist_ok=True)
 
@@ -244,9 +244,19 @@ for fold, (train_real_idx, val_real_idx) in enumerate(
 
     # train_subset = Subset(dataset, train_idx)
     # val_subset = Subset(dataset, val_idx)
-
-    train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False)
+    train_samples = (
+        [real_ds.samples[i]  for i in chosen_real] +
+        [synth_ds.samples[i] for i in chosen_synth]
+    )
+    
+    if not config['dynamic_balanced_sampling']:
+        train_loader = DataLoader(
+            ConcatDataset([Subset(real_ds,  chosen_real),
+                        Subset(synth_ds, chosen_synth)]),
+            batch_size=batch_size, shuffle=True)
+        
+    val_loader = DataLoader(Subset(val_ds, val_real_idx),
+                            batch_size=batch_size, shuffle=False)
 
     ckpt_dir = experiment_path / "checkpoints"
     ckpt_dir.mkdir(exist_ok=True)
@@ -258,7 +268,17 @@ for fold, (train_real_idx, val_real_idx) in enumerate(
 
 
     # Training and evaluation loop
+
     for epoch in range(num_epochs):
+        if config['dynamic_balanced_sampling']:
+            train_loader = make_balanced_loader(
+                samples=train_samples,
+                batch_size=batch_size,
+                transform=train_tf,
+                ratio=config['majority_to_minority_ratio'],          # 1 : 1
+                num_workers=8,
+            )
+
         print(f'Epoch {epoch + 1}/{num_epochs}')
 
         for phase in ['train', 'val']:

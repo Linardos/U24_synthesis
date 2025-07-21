@@ -38,7 +38,7 @@ def load_dicom_and_save_as_nifti(dicom_file_path: str) -> Nifti1Image:
 #  paths & metadata
 # ---------------------------------------------------------------------
 source_folder = '/mnt/d/Datasets/CMMD/'
-destination_folder = os.path.join(source_folder, 'CMMD_clean_256x256')
+destination_folder = os.path.join(source_folder, 'CMMD_binary_256x256')
 os.makedirs(destination_folder, exist_ok=True)
 
 metadata_df = pd.read_csv(os.path.join(source_folder, 'combined_metadata.csv'))
