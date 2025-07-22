@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import torch, torch.nn as nn
 from torch.utils.data import DataLoader, Subset, ConcatDataset
-from torch.optim.lr_scheduler import CosineAnnealingLR, SequentialLR, LinearLR
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     roc_auc_score, balanced_accuracy_score, confusion_matrix
@@ -32,29 +32,91 @@ root_dir   = cfg["root_dir"]
 real_path  = os.path.join(root_dir, cfg["data_dir"])
 synth_path = os.path.join(root_dir, cfg["synth_data_dir"])
 
-# ─────────────── experiment folder ────────────────────────────────────────
-dataset_tag = Path(root_dir).parts[-2]      # -> 'EMBED' / 'CMMD'
+# ─────────────── experiment folder & (maybe) resume ────────────────────────
+dataset_tag = Path(root_dir).parts[-2]           # -> 'EMBED' / 'CMMD'
 exp_dir = Path("experiments") / (
-    f'{cfg["experiment_number"]:03d}__{dataset_tag}_holdout_{cfg["model_name"]}_'
-    f'{cfg["experiment_name"]}_seed{seed}_real_perc{real_fraction}'
+    f'{cfg["experiment_number"]:03d}_{dataset_tag}_holdout_{cfg["model_name"]}_'
+    f'{cfg["experiment_name"]}_seed{seed}_Augs{cfg['augmentations']}_real_perc{real_fraction}'
 )
-exp_dir.mkdir(parents=True, exist_ok=False)
-shutil.copy("config.yaml", exp_dir / "config.yaml")
 
-print(f"Initiating experiment {exp_dir}")
+resume = exp_dir.exists()        # ── key flag
+if resume:
+    print(f"Resuming experiment {exp_dir}")
+else:
+    exp_dir.mkdir(parents=True, exist_ok=False)
+    shutil.copy("config.yaml", exp_dir / "config.yaml")
+    shutil.copy("models.py", exp_dir / "models.py")
+    shutil.copy("holdout_train.py", exp_dir / "holdout_train.py")
+    shutil.copy("data_loaders.py", exp_dir / "data_loaders.py")
+    print(f"Initiating experiment {exp_dir}")
+
 def min_max_normalization(tensor):
     min_val = torch.min(tensor)
     max_val = torch.max(tensor)
     normalized_tensor = (tensor - min_val) / (max_val - min_val)
     return normalized_tensor
     
-train_tf = T.Compose([
-    T.Lambda(min_max_normalization),
-    # random augments only here
-    T.RandomHorizontalFlip(),
-    T.RandomVerticalFlip(),
-    T.Normalize(mean=[0.5], std=[0.5]),
-])
+# train_tf = T.Compose([
+#     T.Lambda(min_max_normalization),
+#     # ───────── geometry ─────────
+#     T.RandomHorizontalFlip(p=0.5),                   # left–right symmetry (safe)
+#     T.RandomVerticalFlip(p=0.3),                # C-view only! lower prob
+#     # T.RandomRotation(degrees=8, fill=0),        # ±8° avoids cropping anatomy
+#     # T.RandomAffine(
+#     #     degrees=0,
+#     #     translate=(0.02, 0.02),                 # ≤2 % shift
+#     #     scale=(0.95, 1.05),                     # small zoom jitter
+#     # ),
+#     # # ───────── intensity / blur ─────────
+#     # T.RandomApply([T.GaussianBlur(3, sigma=(0.1, 1.2))], p=0.3),
+#     # T.RandomApply([T.Lambda(lambda x: x + 0.05*torch.randn_like(x))], p=0.3),
+#     # # ───────── occlusion ─────────
+#     # T.RandomErasing(p=0.25, scale=(0.01, 0.05),
+#     #                 ratio=(0.3, 3.3), value='random'),
+#     # ───────── normalise to [-1,1] ─────────
+#     T.Normalize(mean=[0.5], std=[0.5]),
+# ])
+# --- always‑on steps -----------------------------------------------------
+base = [T.Lambda(min_max_normalization)]
+
+# --- augmentation bundles -----------------------------------------------
+basic = [
+    T.RandomHorizontalFlip(p=0.5),
+    T.RandomVerticalFlip(p=0.3),
+]
+
+geometric = [
+    T.RandomRotation(degrees=8, fill=0),
+    T.RandomAffine(degrees=0, translate=(0.02, 0.02), scale=(0.95, 1.05)),
+]
+
+intensity = [
+    T.RandomApply([T.GaussianBlur(3, sigma=(0.1, 1.2))], p=0.3),
+    T.RandomApply([T.Lambda(lambda x: x + 0.05 * torch.randn_like(x))], p=0.3),
+]
+
+occlusion = [
+    T.RandomErasing(p=0.25, scale=(0.01, 0.05),
+                    ratio=(0.3, 3.3), value='random'),
+]
+
+# --- choose bundle(s) ----------------------------------------------------
+
+if cfg['augmentations'] == 'basic':
+    aug_list = basic
+elif cfg['augmentations'] == 'geometric':
+    aug_list = basic + geometric
+elif cfg['augmentations'] == 'intensity':
+    aug_list = basic + geometric + intensity
+elif cfg['augmentations'] == 'all':
+    aug_list = basic + geometric + intensity + occlusion
+else:                      # 'none' or anything unrecognised
+    aug_list = []
+
+# --- end‑of‑pipeline normalisation --------------------------------------
+norm = [T.Normalize(mean=[0.5], std=[0.5])]
+
+train_tf = T.Compose(base + aug_list + norm)
 
 eval_tf = T.Compose([
     T.Lambda(min_max_normalization),
@@ -155,23 +217,38 @@ optim = torch.optim.AdamW([
 #     filter(lambda p: p.requires_grad, model.parameters()),
 #     lr=cfg["learning_rate"], weight_decay=cfg["weight_decay"]
 # )
-
-criterion = nn.CrossEntropyLoss()
-
-warm = LinearLR(optim, start_factor=0.1, total_iters=3)
-cos  = CosineAnnealingLR(optim, T_max=cfg["num_epochs"]-3)
-sched = SequentialLR(optim, [warm, cos], milestones=[3])
+alpha = 3.0
+weights = torch.tensor([1.0, alpha], device=device).float()
+criterion = nn.CrossEntropyLoss(weight=weights, label_smoothing=0.1)
 
 
-# ─────────────── CSV logger ───────────────────────────────────────────────
+sched = CosineAnnealingLR(optim, T_max=cfg["num_epochs"])
+
+# ─────────────── (optional) load checkpoint ────────────────────────────────
+start_epoch, best_auc, patience = 1, -np.inf, 0
+ckpt_path = exp_dir / "last.pt"
+if resume and ckpt_path.exists():
+    ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
+
+    model.load_state_dict(ckpt["model_state"])
+    optim.load_state_dict(ckpt["optim_state"])
+    sched.load_state_dict(ckpt["sched_state"])
+    best_auc  = ckpt["best_auc"]
+    patience  = ckpt["patience"]
+    start_epoch = ckpt["epoch"] + 1
+    print(f"→ Loaded checkpoint from epoch {ckpt['epoch']}  (best AUC {best_auc:.4f})")
+
+# ─────────────── CSV logger (append if resuming) ───────────────────────────
+log_mode = "a" if resume else "w"
+log_f = open(exp_dir / "logs.csv", log_mode, newline="")
+writer = csv.writer(log_f)
 header = ["epoch","phase","loss","overall_acc","AUC","balanced_acc"] + \
          [f"ACC_class{c}" for c in classes]
-log_f = open(exp_dir / "logs.csv", "w", newline="")
-writer = csv.writer(log_f); writer.writerow(header)
+if not resume:               # only write header on a fresh run
+    writer.writerow(header)
 
-# ─────────────── training loop ────────────────────────────────────────────
-best_auc, patience = -np.inf, 0
-for epoch in range(1, cfg["num_epochs"] + 1):
+# ─────────────── training loop ─────────────────────────────────────────────
+for epoch in range(start_epoch, cfg["num_epochs"] + 1):
 
     # -- pick loader --------------------------------------------------
     if cfg['dynamic_balanced_sampling']:
@@ -231,9 +308,16 @@ for epoch in range(1, cfg["num_epochs"] + 1):
         print(f"{phase:5s}  loss={row[2]:.4f}  acc={row[3]:.4f}  acc_malignant={per_cls_acc[1]:.4f}  acc_benign={per_cls_acc[0]:.4f}   AUC={row[4]:.4f}")
 
         if phase == "val":
-            if auc > best_auc + 0.002:
+            if auc > best_auc + 0.001:
                 best_auc, patience = auc, 0
-                torch.save(model.state_dict(), exp_dir / "best.pt")
+                torch.save({
+                    "epoch":      epoch,
+                    "model_state":model.state_dict(),
+                    "optim_state":optim.state_dict(),
+                    "sched_state":sched.state_dict(),
+                    "best_auc":   best_auc,
+                    "patience":   patience,
+                }, ckpt_path)
                 print("✓ checkpointed (AUC ↑)")
             else:
                 patience += 1

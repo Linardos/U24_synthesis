@@ -14,16 +14,21 @@ real_percentage: 1.0 # use 0 for full synthetic, use 0.25, 0.5, 0.75 for mix
 
 num_classes: 2 #
 
+# data handling
 dynamic_balanced_sampling: True
 majority_to_minority_ratio: 1.0
 batch_size: 32
-learning_rate: 0.001
+augmentations: basic
+
+learning_rate: 0.0003
 weight_decay: 0.00001
-early_stopping_patience: 20
+early_stopping_patience: 10
 num_epochs: 100
 val_split: 0.1 # only for hold-out not cval
 k_folds: 5 # only for cval
-model_name: efficientnet_b0 #resnet50
+model_name: convnext_tiny
+  # resnet50 works best with 0.001 LR
+  # convnext_tiny
   # - efficientnet_b0
   # - densenet121
   # # - densenet169
@@ -32,11 +37,10 @@ model_name: efficientnet_b0 #resnet50
   # - vgg19
 seed: 44
 sanity_check: False
-transform_check: basic # "basic" to just apply data preprocessing
 store_sample_per_epoch: True # to visualize images
-experiment_number: 80 # 62 onward is 12 vs 56
+experiment_number: 85 # 62 onward is 12 vs 56
 # --------60 # 48-53 we test four class. 55 to 60 we test binary, last experiment  full synthetic in each case (53 and 60)
 
-experiment_name: model_regularizations_test02 # four_class_pretrainedImagenet_frozenlayers #binary_classification #
+experiment_name: model_regularizations_test06weightedLoss # four_class_pretrainedImagenet_frozenlayers #binary_classification #
 # experiment_name: sanity_EMBED_multi_class_CV
 # experiment_name: ThreeDataDM_augmentations
