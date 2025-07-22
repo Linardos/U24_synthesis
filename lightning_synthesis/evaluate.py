@@ -228,7 +228,8 @@ def metrics_for_scale(model, scale):
         fid_global.update(to_rgb(synth.to(device)), real=False)
 
         # oracle accuracy ------------------------------------------------
-        logits  = oracle(oracle_norm(synth.to(device)))           # (N_EVAL,C)
+        inp = oracle_norm(synth.to(device)).half()   # keep/restore FP16
+        logits = oracle(inp)                         # (N_EVAL, C)
         preds   = logits.argmax(dim=1)
         correct = (preds == label_id).sum().item()
 

@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import torch, torch.nn as nn
 from torch.utils.data import DataLoader, Subset, ConcatDataset
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, SequentialLR, LinearLR
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     roc_auc_score, balanced_accuracy_score, confusion_matrix
@@ -15,7 +15,7 @@ from sklearn.metrics import (
 from tqdm import tqdm
 
 import torchvision.transforms as T
-from data_loaders import NiftiDataset        # ← your dict-style dataset
+from data_loaders import NiftiDataset, make_balanced_loader
 from models import get_model
 
 # ─────────────── configuration ────────────────────────────────────────────
@@ -24,7 +24,7 @@ with open("config.yaml") as f:
 
 seed           = int(sys.argv[1]) if len(sys.argv) > 1 else cfg["seed"]
 real_fraction  = cfg.get("real_percentage", 1.0)
-val_split      = cfg.get("val_split", 0.2)
+val_split      = cfg.get("val_split", 0.1)
 
 random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
 
@@ -33,13 +33,15 @@ real_path  = os.path.join(root_dir, cfg["data_dir"])
 synth_path = os.path.join(root_dir, cfg["synth_data_dir"])
 
 # ─────────────── experiment folder ────────────────────────────────────────
+dataset_tag = Path(root_dir).parts[-2]      # -> 'EMBED' / 'CMMD'
 exp_dir = Path("experiments") / (
-    f'{cfg["experiment_number"]:03d}_holdout_{cfg["model_name"]}_'
+    f'{cfg["experiment_number"]:03d}__{dataset_tag}_holdout_{cfg["model_name"]}_'
     f'{cfg["experiment_name"]}_seed{seed}_real_perc{real_fraction}'
 )
 exp_dir.mkdir(parents=True, exist_ok=False)
 shutil.copy("config.yaml", exp_dir / "config.yaml")
 
+print(f"Initiating experiment {exp_dir}")
 def min_max_normalization(tensor):
     min_val = torch.min(tensor)
     max_val = torch.max(tensor)
@@ -111,6 +113,11 @@ train_set = ConcatDataset([
     Subset(synth_ds, add_synth)
 ])
 val_set   = Subset(val_ds, val_idx)   # 100 % real
+# this list powers the on-the-fly balanced loader
+train_samples = (
+    [real_ds.samples[i]  for i in keep_real] +
+    [synth_ds.samples[i] for i in add_synth]
+)
 
 json.dump(
     {"train_real": list(map(int, keep_real)),
@@ -119,19 +126,42 @@ json.dump(
     open(exp_dir / "indices.json", "w"), indent=2
 )
 
-train_loader = DataLoader(train_set, batch_size=cfg["batch_size"], shuffle=True)
-val_loader   = DataLoader(val_set,   batch_size=cfg["batch_size"], shuffle=False)
+if not cfg['dynamic_balanced_sampling']:
+    train_loader = DataLoader(
+        train_set,
+        batch_size=cfg["batch_size"],
+        shuffle=True
+    )
+
+val_loader = DataLoader(val_set,
+                        batch_size=cfg["batch_size"],
+                        shuffle=False)
+
 
 # ─────────────── model & optimisation ─────────────────────────────────────
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model  = get_model(cfg["model_name"], pretrained=True).to(device)
+backbone_params = []
+head_params     = []
+for n,p in model.named_parameters():
+    (head_params if n.startswith('backbone.fc') else backbone_params).append(p)
+
+optim = torch.optim.AdamW([
+        {'params': backbone_params, 'lr': cfg["learning_rate"]*0.1}, # lower LR for backbone
+        {'params': head_params,     'lr': cfg["learning_rate"]}
+])
+
+# optim     = torch.optim.Adam(
+#     filter(lambda p: p.requires_grad, model.parameters()),
+#     lr=cfg["learning_rate"], weight_decay=cfg["weight_decay"]
+# )
 
 criterion = nn.CrossEntropyLoss()
-optim     = torch.optim.Adam(
-    filter(lambda p: p.requires_grad, model.parameters()),
-    lr=cfg["learning_rate"], weight_decay=cfg["weight_decay"]
-)
-sched = CosineAnnealingLR(optim, T_max=cfg["num_epochs"])
+
+warm = LinearLR(optim, start_factor=0.1, total_iters=3)
+cos  = CosineAnnealingLR(optim, T_max=cfg["num_epochs"]-3)
+sched = SequentialLR(optim, [warm, cos], milestones=[3])
+
 
 # ─────────────── CSV logger ───────────────────────────────────────────────
 header = ["epoch","phase","loss","overall_acc","AUC","balanced_acc"] + \
@@ -142,6 +172,18 @@ writer = csv.writer(log_f); writer.writerow(header)
 # ─────────────── training loop ────────────────────────────────────────────
 best_auc, patience = -np.inf, 0
 for epoch in range(1, cfg["num_epochs"] + 1):
+
+    # -- pick loader --------------------------------------------------
+    if cfg['dynamic_balanced_sampling']:
+        train_loader = make_balanced_loader(
+            samples   = train_samples,
+            batch_size= cfg["batch_size"],
+            transform = train_tf,
+            ratio     = cfg["majority_to_minority_ratio"],       # keep 1:1; tweak via cfg if you like
+            num_workers = 8
+        )
+    # else: train_loader already defined above
+
     print(f"\nEpoch {epoch}/{cfg['num_epochs']}")
     for phase, loader in [("train", train_loader), ("val", val_loader)]:
         model.train(phase == "train")
