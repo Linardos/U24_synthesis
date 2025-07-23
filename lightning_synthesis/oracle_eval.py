@@ -36,13 +36,14 @@ SEED         = 42          # reproducibility everywhere
 RESOLUTION   = 256         # image side length (for transforms)
 BATCH        = 4           # Oracle batch size (fp16 OK)
 N_EVAL       = 200         # images sampled *per class* to evaluate
-EVAL_SET = 'val'
+EVAL_SET = 'test'
 CONFIG_YAML  = "config_l.yaml"  # same config file as before
 ORACLE_DIR  = "072_resnet50_CMMD_binary_12vs56_seed44_real_perc1.0" # "062_resnet50_binary_12vs56_seed44_real_perc1.0"
-# ORACLE_DIR  = "073_resnet50_CMMD_balanced_binary_12vs56_seed44_real_perc1.0"
-# ORACLE_DIR  = "074_CMMD_binary_256x256_resnet50_EMBED_binary_12vs56_dynamic11_seed44_real_perc1.0"
-# ORACLE_DIR  = "075_CMMD_binary_256x256_resnet50_EMBED_binary_12vs56_dynamic21_seed44_real_perc1.0"
-DATASET     = "CMMD" # EMBED or CMMD
+ORACLE_DIR  = "073_resnet50_CMMD_balanced_binary_12vs56_seed44_real_perc1.0"
+ORACLE_DIR  = "074_CMMD_binary_256x256_resnet50_EMBED_binary_12vs56_dynamic11_seed44_real_perc1.0"
+ORACLE_DIR  = "075_CMMD_binary_256x256_resnet50_EMBED_binary_12vs56_dynamic21_seed44_real_perc1.0"
+ORACLE_DIR  = "088_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real_perc1.0"
+DATASET     = "EMBED" # EMBED or CMMD
 
 # Paths ----------------------------------------------------------------------------------
 if EVAL_SET == 'val':
@@ -50,18 +51,22 @@ if EVAL_SET == 'val':
 elif EVAL_SET == 'test':
     DATA_ROOT = f"/mnt/d/Datasets/{DATASET}/{DATASET}_binary_256x256/test"
 
+print(f"Evaluating on dataset: {DATASET} at path: {DATA_ROOT}")
 
 with open(CONFIG_YAML) as f:
     cfg = yaml.safe_load(f)
 
 if cfg["num_classes"] == 2:
     # ORACLE_CKPT = f"/home/locolinux2/U24_synthesis/experiments/{ORACLE_DIR}/best.pt"
-        
     ORACLE_CKPT = (
         "/home/locolinux2/U24_synthesis/experiments/"
-        f"{ORACLE_DIR}/"
-        "checkpoints/best_resnet50_fold5.pt"
+        f"{ORACLE_DIR}/last.pt"
     )
+    # ORACLE_CKPT = (
+    #     "/home/locolinux2/U24_synthesis/experiments/"
+    #     f"{ORACLE_DIR}/"
+    #     "checkpoints/best_resnet50_fold5.pt"
+    # )
     # ORACLE_CKPT = (
     #     "/home/locolinux2/U24_synthesis/experiments/"
     #     f"{ORACLE_DIR}/"
@@ -103,7 +108,7 @@ if EVAL_SET == "test":
 elif EVAL_SET == "val":
     TRAIN_EXP_DIR = f"/home/locolinux2/U24_synthesis/experiments/{ORACLE_DIR}"
     val_idx = np.asarray(json.load(open(os.path.join(TRAIN_EXP_DIR,
-                                   "indices_fold3.json")))["val_real"])
+                                   "indices.json")))["val_real"])
     val_ds = Subset(full_ds, val_idx)
 else:  # quick 10 % random split from train/original
     g = torch.Generator().manual_seed(SEED)
@@ -148,9 +153,11 @@ val_loaders = {
 }
 
 # ── LOAD ORACLE (fp16 + GPU) ──────────────────────────────────────────────
-oracle = get_model("resnet50", num_classes=len(categories), pretrained=False)
-ckpt = torch.load(ORACLE_CKPT, map_location="cpu")
-oracle.load_state_dict(ckpt["model_state_dict"])
+# oracle = get_model("resnet50", num_classes=len(categories), pretrained=False)
+oracle = get_model("convnext_tiny", num_classes=len(categories), pretrained=False)
+ckpt = torch.load(ORACLE_CKPT, map_location="cpu", weights_only=False)
+# oracle.load_state_dict(ckpt["model_state_dict"])
+oracle.load_state_dict(ckpt["model_state"])
 oracle = oracle.half().to(DEVICE).eval()
 
 oracle_norm = Normalize(mean=[0.5], std=[0.5])  # maps [0,1] → [‑1,1]

@@ -36,7 +36,7 @@ synth_path = os.path.join(root_dir, cfg["synth_data_dir"])
 dataset_tag = Path(root_dir).parts[-2]           # -> 'EMBED' / 'CMMD'
 exp_dir = Path("experiments") / (
     f'{cfg["experiment_number"]:03d}_{dataset_tag}_holdout_{cfg["model_name"]}_'
-    f'{cfg["experiment_name"]}_seed{seed}_Augs{cfg['augmentations']}_real_perc{real_fraction}'
+    f'{cfg["experiment_name"]}_seed{seed}_Augs{cfg["augmentations"]}_real_perc{real_fraction}'
 )
 
 resume = exp_dir.exists()        # ── key flag
@@ -91,7 +91,7 @@ geometric = [
 ]
 
 intensity = [
-    T.RandomApply([T.GaussianBlur(3, sigma=(0.1, 1.2))], p=0.3),
+    T.RandomApply([T.GaussianBlur(3,(0.1,0.8))],p=0.2),
     T.RandomApply([T.Lambda(lambda x: x + 0.05 * torch.randn_like(x))], p=0.3),
 ]
 
@@ -217,9 +217,7 @@ optim = torch.optim.AdamW([
 #     filter(lambda p: p.requires_grad, model.parameters()),
 #     lr=cfg["learning_rate"], weight_decay=cfg["weight_decay"]
 # )
-alpha = 3.0
-weights = torch.tensor([1.0, alpha], device=device).float()
-criterion = nn.CrossEntropyLoss(weight=weights, label_smoothing=0.1)
+criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
 
 sched = CosineAnnealingLR(optim, T_max=cfg["num_epochs"])
