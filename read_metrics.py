@@ -1,45 +1,69 @@
-import pickle
-import os
-import yaml
+#!/usr/bin/env python
+# collect_metrics.py -------------------------------------------------------
+"""
+Summarise oracle-training metrics across experiments.
 
-def load_config(config_path='config.yaml'):
-    with open(config_path, 'r') as file:
-        return yaml.safe_load(file)
+For each experiment folder given on the CLI:
+  • read logs.csv
+  • find max validation AUC (AUC_max)
+  • find the LAST epoch whose AUC ≥ AUC_max − 0.001
+  • report that epoch’s metrics
+"""
 
-def read_metrics(pickle_file_path):
-    with open(pickle_file_path, 'rb') as file:
-        metrics = pickle.load(file)
-    return metrics
+import sys, csv, pathlib
+import pandas as pd
 
-def main():
-    # Load the config file to get the experiment number and other details
-    config = load_config()
-    experiment_number = config['experiment_number']
-    data_dir = config['data_dir']
+TOL = 1e-3          # 0.001 AUC tolerance
 
-    # Construct the folder name and the pickle file path
-    experiment_folder = "experiments/001_original/001_metrics_original"
-    pickle_file_path = os.path.join(experiment_folder, 'metrics.pkl')
+def pick_epoch(log_path: pathlib.Path):
+    with log_path.open() as f:
+        rows = [r for r in csv.DictReader(f) if r["phase"] == "val"]
 
-    # Check if the pickle file exists
-    if not os.path.exists(pickle_file_path):
-        print(f"Metrics file not found at {pickle_file_path}")
-        return
+    # float-ify once
+    for r in rows:
+        r["AUC"]         = float(r["AUC"])
+        r["overall_acc"] = float(r["overall_acc"])
+        r["ACC_class0"]  = float(r["ACC_class0"])
+        r["ACC_class1"]  = float(r["ACC_class1"])
+        r["epoch"]       = int(r["epoch"])
 
-    # Read the metrics from the pickle file
-    metrics = read_metrics(pickle_file_path)
+    auc_max = max(r["AUC"] for r in rows)
+    # keep LAST epoch within tolerance
+    best = max((r for r in rows if r["AUC"] >= auc_max - TOL),
+               key=lambda r: r["epoch"])
 
-    # Display the metrics
-    for i, x in enumerate(metrics.items()):
-        model_name, model_metrics = x
-        print(f"Metrics for {model_name}:")
-        print(f"  Epoch {i + 1}:")
-        print(f"    Training Loss: {model_metrics['train_loss']}")
-        print(f"    Validation Loss: {model_metrics['val_loss']}")
-        print(f"    Training Accuracy: {model_metrics['train_acc']}")
-        print(f"    Validation Accuracy: {model_metrics['val_acc']}")
-        print(f"    Training AUC: {model_metrics['train_auc']}")
-        print(f"    Validation AUC: {model_metrics['val_auc']}")
+    return {
+        "experiment":  log_path.parent.name,
+        "epoch":       best["epoch"],
+        "AUC":         round(best["AUC"], 3),
+        "Accuracy":    round(best["overall_acc"], 3),
+        "Sensitivity": round(best["ACC_class1"], 3),
+        "Specificity": round(best["ACC_class0"], 3),
+    }
+
+def main(exp_dirs):
+    recs = []
+    for d in exp_dirs:
+        log = pathlib.Path(d) / "logs.csv"
+        if not log.exists():
+            print(f"⚠️  {log} missing – skipped")
+            continue
+        recs.append(pick_epoch(log))
+
+    if not recs:
+        print("No valid experiments found."); return
+
+    df = (pd.DataFrame(recs)
+            .set_index("experiment")
+            .sort_values("AUC", ascending=False))
+
+    print("\n=== Oracle summary (Δ≤0.001 criterion) ===")
+    print(df.to_markdown())        # easy copy-paste
+    # also dump CSV if you like
+    df.to_csv("oracle_summary.csv")
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) < 2:
+        print("Usage: python collect_metrics.py EXP_DIR [EXP_DIR ...]")
+        sys.exit(1)
+    main(sys.argv[1:])

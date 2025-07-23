@@ -42,7 +42,7 @@ ORACLE_DIR  = "072_resnet50_CMMD_binary_12vs56_seed44_real_perc1.0" # "062_resne
 ORACLE_DIR  = "073_resnet50_CMMD_balanced_binary_12vs56_seed44_real_perc1.0"
 ORACLE_DIR  = "074_CMMD_binary_256x256_resnet50_EMBED_binary_12vs56_dynamic11_seed44_real_perc1.0"
 ORACLE_DIR  = "075_CMMD_binary_256x256_resnet50_EMBED_binary_12vs56_dynamic21_seed44_real_perc1.0"
-ORACLE_DIR  = "088_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real_perc1.0"
+ORACLE_DIR  = "088_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real_perc1.0" # GOLDEN EMBED, on test: Oracle ACC : {'benign': '0.875', 'malignant': '0.825', 'mean': '0.850'}
 DATASET     = "EMBED" # EMBED or CMMD
 
 # Paths ----------------------------------------------------------------------------------
