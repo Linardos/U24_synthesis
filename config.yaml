@@ -18,7 +18,7 @@ num_classes: 2 #
 dynamic_balanced_sampling: True
 majority_to_minority_ratio: 1.0
 batch_size: 32
-augmentations: intensity
+augmentations: geometric
 
 learning_rate: 0.0003
 weight_decay: 0.00001
@@ -38,7 +38,7 @@ model_name: convnext_tiny
 seed: 44
 sanity_check: False
 store_sample_per_epoch: True # to visualize images
-experiment_number: 89 # 62 onward is 12 vs 56
+experiment_number: 91 # 62 onward is 12 vs 56
 # --------60 # 48-53 we test four class. 55 to 60 we test binary, last experiment  full synthetic in each case (53 and 60)
 
 experiment_name: model_regularizations_test06smoothingLoss # four_class_pretrainedImagenet_frozenlayers #binary_classification #

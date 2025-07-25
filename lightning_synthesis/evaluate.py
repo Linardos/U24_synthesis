@@ -38,7 +38,7 @@ ckpt  = "054_DDPM_default512_256x256/checkpoints/epoch=04-step=1435.ckpt" # FID 
 ckpt  = "057_DDPM_seed2025_cropped_256x256/checkpoints/epoch=04-step=1435.ckpt"
 ckpt = "063_DDPM_contrast-aug-20percent_256x256/checkpoints/epoch=04-step=1435.ckpt"
 ckpt = "092_DDPM_MS-SSIM_10perc_HF_5perc_256x256/checkpoints/epoch=18-step=2736.ckpt" # GOLD
-# ckpt = "106_DDPM_3loss_binary_try/checkpoints/epoch=18-step=2736.ckpt" # functional binary
+ckpt = "106_DDPM_3loss_binary_try/checkpoints/epoch=18-step=2736.ckpt" # functional binary
 ckpt = "107_DDPM_3loss_4class_retry/checkpoints/epoch=17-step=3456.ckpt"
 ckpt = "113_DDPM_binary_epochwise_balanced/checkpoints/epoch=30-step=1116.ckpt" # dynamic epoch-wise data balancing 
 ckpt = "114_DDPM_binary_epochwise_balanced_12vs56/checkpoints/epoch=22-step=1771.ckpt" # more data
@@ -46,12 +46,15 @@ ckpt = "121_DDPM_binary_21fixedmatching_12vs56/checkpoints/epoch=20-step=1827.ck
 ckpt = "120_DDPM_binary_21perepoch_12vs56/checkpoints/epoch=19-step=1740.ckpt" # seems decent! Even guidance scale 4 gets 70% accuracy.
 ckpt = "123_DDPM_binary_11_5perepoch_12vs56/checkpoints/epoch=20-step=1512.ckpt" # 
 ckpt = "124_DDPM_binary_11perepoch_12vs56/checkpoints/epoch=26-step=1566.ckpt"
-ckpt = "140_DDPM_augmentationsgeometric_binary_11perepoch_12vs56/checkpoints/epoch=26-step=1566.ckpt" # AUGMENTATIONS ARE AWESOME! 1:1
+# ckpt = "140_DDPM_augmentationsgeometric_binary_11perepoch_12vs56/checkpoints/epoch=26-step=1566.ckpt" # AUGMENTATIONS ARE AWESOME! 1:1
 # ckpt = "141_DDPM_augmentationsgeometric_binary_11_5perepoch_12vs56/checkpoints/epoch=20-step=1512.ckpt" # augmentations, but 1.5:1
 # ckpt = "142_DDPM_augmentationsall_binary_11perepoch_12vs56/checkpoints/epoch=21-step=1276.ckpt"
 # ckpt = "143_DDPM_augmentationsgeometric_binary_31fixed_12vs56/checkpoints/epoch=10-step=957.ckpt" # just a test for some metrics
-ckpt = "144_CMMD_DDPM_augmentationsgeometric_binary_13fixed_12vs56/checkpoints/epoch=12-step=962.ckpt"
-ckpt = "145_CMMD_DDPM_augmentationsNone_binary_11balancing_12vs56/checkpoints/epoch=29-step=990.ckpt"
+# ckpt = "144_CMMD_DDPM_augmentationsgeometric_binary_13fixed_12vs56/checkpoints/epoch=12-step=962.ckpt"
+# ckpt = "145_CMMD_DDPM_augmentationsNone_binary_11balancing_12vs56/checkpoints/epoch=29-step=990.ckpt"
+# ----- EMBED
+ckpt = "147_EMBED_DDPM_augmentationsNone_binary_31fixedmatching_12vs56/checkpoints/epoch=26-step=1566.ckpt" # simple, no augs no balancing
+
 CKPT_PATH = root / ckpt
 
 # CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/094_DDPM_MS-SSIM_10perc_HF_5perc_val/checkpoints/epoch=12-step=1690.ckpt" # ACTUAL GOLD
@@ -60,31 +63,36 @@ print(f"Evaluating {CKPT_PATH}")
 NAME_TAG = f"{ckpt[:4]}"
 
 RESOLUTION = 256
-BATCH      = 8
+BATCH      = 16
 N_EVAL     = 200                       # samples / class
-SCALES     = [0,4,7,8,9] #,9,10, 0,4]#[0, 4, 7, 8]
-EVAL_SET = 'val'
+SCALES     = [0,4,5,6,7,8] #,9,10, 0,4]#[0, 4, 7, 8]
+EVAL_SET = 'test'
 # ORACLE_DIR  = "072_resnet50_CMMD_binary_12vs56_seed44_real_perc1.0" # "062_resnet50_binary_12vs56_seed44_real_perc1.0"
 ORACLE_DIR  = "073_resnet50_CMMD_balanced_binary_12vs56_seed44_real_perc1.0"
 ORACLE_DIR  = "074_CMMD_binary_256x256_resnet50_EMBED_binary_12vs56_dynamic11_seed44_real_perc1.0"
 ORACLE_DIR  = "075_CMMD_binary_256x256_resnet50_EMBED_binary_12vs56_dynamic21_seed44_real_perc1.0"
-DATASET = 'CMMD' # CMMD or EMBED
-
+ORACLE_DIR  = "088_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real_perc1.0" # GOLDEN EMBED, on test: Oracle ACC : {'benign': '0.875', 'malignant': '0.825', 'mean': '0.850'}
+DATASET = 'EMBED' # CMMD or EMBED
+MODEL_NAME = 'convnext_tiny'
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 torch.manual_seed(42); random.seed(42); np.random.seed(42)
 
 if config["num_classes"] == 2:
     ORACLE_CKPT = ("/home/locolinux2/U24_synthesis/experiments/"
-                f"{ORACLE_DIR}/"
-                "checkpoints/best_resnet50_fold5.pt")
+                f"{ORACLE_DIR}/last.pt")
+                # "checkpoints/best_resnet50_fold5.pt")
 elif config["num_classes"] == 4:
     ORACLE_CKPT = ("/home/locolinux2/U24_synthesis/experiments/"
                 "048_resnet50_four_class_pretrainedImagenet_frozenlayers_seed44_real_perc1.0/"
                 "checkpoints/best_resnet50_fold5.pt")
                
 # ── DATASET ───────────────────────────────────────────────────────────────────
-root_dir = f"/mnt/d/Datasets/{DATASET}/{DATASET}_binary_256x256/train/original"
+if EVAL_SET == 'val':
+    DATA_ROOT = f"/mnt/d/Datasets/{DATASET}/{DATASET}_binary_256x256/train/original"
+elif EVAL_SET =='test':
+    DATA_ROOT = f"/mnt/d/Datasets/{DATASET}/{DATASET}_binary_256x256/test"
 
+print(f"Evaluating synthesis on dataset: {DATASET} at path: {DATA_ROOT}")
 categories = ["benign", "malignant"]
 if config["num_classes"] >= 3:   categories.append("probably_benign")
 if config["num_classes"] == 4:   categories.append("suspicious")
@@ -146,11 +154,12 @@ model = (MonaiDDPM
          .load_from_checkpoint(CKPT_PATH, map_location="cpu")
          .half().to(device).eval())
 # ── LOAD ORACLE  (right after you load the diffusion model) ────────────────
-oracle = get_model("resnet50",
+oracle = get_model(MODEL_NAME,
                    num_classes=len(categories),   # ⬅  matches current eval set
                    pretrained=False)
-ckpt   = torch.load(ORACLE_CKPT, map_location="cpu")
-oracle.load_state_dict(ckpt["model_state_dict"])
+ckpt   = torch.load(ORACLE_CKPT, map_location="cpu", weights_only=False)
+# oracle.load_state_dict(ckpt["model_state_dict"])
+oracle.load_state_dict(ckpt["model_state"])
 oracle = oracle.half().to(device).eval()                   # keep fp16 + GPU
 
 # image → oracle preprocessing (expects 1-channel × 256 ×256 in **[-1,1]**)
@@ -170,14 +179,14 @@ real_tf = mt.Compose([
     mt.ToTensord(keys=["image"]),
 ])
 
-full_ds  = NiftiSynthesisDataset(root_dir, transform=real_tf)
+full_ds  = NiftiSynthesisDataset(DATA_ROOT, transform=real_tf)
 
 # ---------- reproducible 10 % val split then 128-per-class subset ----------
 if EVAL_SET=='val':
     # Folder that contains best.pt and indices.json (adjust if needed)
     TRAIN_EXP_DIR = f"/home/locolinux2/U24_synthesis/experiments/{ORACLE_DIR}"
 
-    with open(os.path.join(TRAIN_EXP_DIR, "indices_fold3.json")) as jf:
+    with open(os.path.join(TRAIN_EXP_DIR, "indices.json")) as jf:
         idx_dict = json.load(jf)
     val_idx = np.asarray(idx_dict["val_real"], dtype=int)     # same order as real_ds
     val_ds = Subset(full_ds, val_idx) 

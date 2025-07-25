@@ -10,7 +10,7 @@ For each experiment folder given on the CLI:
   • report that epoch’s metrics
 """
 
-import sys, csv, pathlib
+import csv, pathlib
 import pandas as pd
 
 TOL = 1e-3          # 0.001 AUC tolerance
@@ -63,7 +63,11 @@ def main(exp_dirs):
     df.to_csv("oracle_summary.csv")
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python collect_metrics.py EXP_DIR [EXP_DIR ...]")
-        sys.exit(1)
-    main(sys.argv[1:])
+    
+    experiments_list = [
+        "./experiments/083__EMBED_binary_256x256_holdout_resnet50_model_regularizations_test04lowerLR_seed44_real_perc1.0",
+        "./experiments/087_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsbasic_real_perc1.0",
+        "./experiments/088_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real_perc1.0",
+        "./experiments/089_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsintensity_real_perc1.0"
+    ]
+    main(experiments_list)

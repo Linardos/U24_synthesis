@@ -56,26 +56,6 @@ def min_max_normalization(tensor):
     normalized_tensor = (tensor - min_val) / (max_val - min_val)
     return normalized_tensor
     
-# train_tf = T.Compose([
-#     T.Lambda(min_max_normalization),
-#     # ───────── geometry ─────────
-#     T.RandomHorizontalFlip(p=0.5),                   # left–right symmetry (safe)
-#     T.RandomVerticalFlip(p=0.3),                # C-view only! lower prob
-#     # T.RandomRotation(degrees=8, fill=0),        # ±8° avoids cropping anatomy
-#     # T.RandomAffine(
-#     #     degrees=0,
-#     #     translate=(0.02, 0.02),                 # ≤2 % shift
-#     #     scale=(0.95, 1.05),                     # small zoom jitter
-#     # ),
-#     # # ───────── intensity / blur ─────────
-#     # T.RandomApply([T.GaussianBlur(3, sigma=(0.1, 1.2))], p=0.3),
-#     # T.RandomApply([T.Lambda(lambda x: x + 0.05*torch.randn_like(x))], p=0.3),
-#     # # ───────── occlusion ─────────
-#     # T.RandomErasing(p=0.25, scale=(0.01, 0.05),
-#     #                 ratio=(0.3, 3.3), value='random'),
-#     # ───────── normalise to [-1,1] ─────────
-#     T.Normalize(mean=[0.5], std=[0.5]),
-# ])
 # --- always‑on steps -----------------------------------------------------
 base = [T.Lambda(min_max_normalization)]
 
