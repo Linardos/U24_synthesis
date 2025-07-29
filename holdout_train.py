@@ -42,7 +42,7 @@ fine_tune_ckpt = cfg.get("fine_tune_ckpt", "")
 if fine_tune: 
     real_fraction = 1.0
     synth_mult    = 0.0
-    fine_tune_tag = "_fTune_" + fine_tune_ckpt[:4] + fine_tune_ckpt[-14:]
+    fine_tune_tag = "_fTune_" + fine_tune_ckpt[:4] + fine_tune_ckpt[-15:]
 else:
     fine_tune_tag = ""
 # ----
