@@ -34,10 +34,25 @@ synth_path = os.path.join(root_dir, cfg["synth_data_dir"])
 
 # ─────────────── experiment folder & (maybe) resume ────────────────────────
 dataset_tag = Path(root_dir).parts[-2]           # -> 'EMBED' / 'CMMD'
+synth_mult = cfg.get("synthetic_multiplier", 1.0)
+
+# fine-tuning only on real, from a checkpoint trained on mix synth/real
+fine_tune      = cfg.get("fine_tune", False)
+fine_tune_ckpt = cfg.get("fine_tune_ckpt", "")
+if fine_tune: 
+    real_fraction = 1.0
+    synth_mult    = 0.0
+    fine_tune_tag = "_fTune_" + fine_tune_ckpt[:4] + fine_tune_ckpt[-14:]
+else:
+    fine_tune_tag = ""
+# ----
+
 exp_dir = Path("experiments") / (
     f'{cfg["experiment_number"]:03d}_{dataset_tag}_holdout_{cfg["model_name"]}_'
-    f'{cfg["experiment_name"]}_seed{seed}_Augs{cfg["augmentations"]}_real_perc{real_fraction}'
+    f'{cfg["experiment_name"]}_seed{seed}_Augs{cfg["augmentations"]}_'
+    f'real{real_fraction}_syn{synth_mult}{fine_tune_tag}'
 )
+
 
 resume = exp_dir.exists()        # ── key flag
 if resume:
@@ -140,15 +155,27 @@ for c in classes:
     cls_idx = tr_idx[real_lbl[tr_idx] == c]
     rng.shuffle(cls_idx)
 
-    n_keep = int(round(len(cls_idx) * real_fraction))
-    n_need = len(cls_idx) - n_keep
+    # ❶ decide how many real images to keep
+    n_real_keep = int(round(len(cls_idx) * real_fraction))
+    keep_real.extend(cls_idx[:n_real_keep])
 
-    keep_real.extend(cls_idx[:n_keep])
+    # ❷ decide how many synthetic images to add
+    if real_fraction > 0:
+        base = n_real_keep                       # normal case
+    else:
+        base = len(cls_idx)                      # “only-synthetic” case
 
-    if n_need and len(synth_pool_by_cls[c]):
-        add_synth.extend(rng.choice(synth_pool_by_cls[c], size=n_need, replace=False))
-    elif n_need:
-        print(f"⚠️  no synthetic samples for class {c}")
+    n_syn_needed = int(round(base * synth_mult))
+
+    pool = synth_pool_by_cls[c]
+    if n_syn_needed and len(pool):
+        add_synth.extend(
+            rng.choice(pool, size=min(n_syn_needed, len(pool)), replace=False)
+        )
+    elif n_syn_needed:
+        print(f"⚠️  not enough synthetic samples for class {c} "
+              f"(requested {n_syn_needed}, found {len(pool)})")
+
 
 train_set = ConcatDataset([
     Subset(real_ds,  keep_real),
@@ -160,6 +187,13 @@ train_samples = (
     [real_ds.samples[i]  for i in keep_real] +
     [synth_ds.samples[i] for i in add_synth]
 )
+
+print(f"┌──── train sampling summary ────")
+print(f"│ kept real      : {len(keep_real):5d}")
+print(f"│ added synthetic: {len(add_synth):5d}")
+print(f"│ total train    : {len(keep_real)+len(add_synth):5d}")
+print(f"└──────────────────────────")
+
 
 json.dump(
     {"train_real": list(map(int, keep_real)),
@@ -202,29 +236,43 @@ criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
 sched = CosineAnnealingLR(optim, T_max=cfg["num_epochs"])
 
-# ─────────────── (optional) load checkpoint ────────────────────────────────
+# ─────────────── load checkpoint (resume if continuing interrupted run, or fine-tune from a previous experiment) ────────────────────────────────
 start_epoch, best_auc, patience = 1, -np.inf, 0
 ckpt_path = exp_dir / "last.pt"
-if resume and ckpt_path.exists():
-    ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
+if fine_tune and fine_tune_ckpt:                         # ← NEW  ❶
+    ckpt_path_to_load = Path("experiments") / fine_tune_ckpt / "last.pt"
+    print(f"🔄  fine-tune – loading weights from {ckpt_path_to_load}")
+elif resume and (exp_dir / "last.pt").exists():          # ← existing logic
+    ckpt_path_to_load = exp_dir / "last.pt"
+else:
+    ckpt_path_to_load = None
 
+if ckpt_path_to_load:
+    ckpt = torch.load(ckpt_path_to_load, map_location=device, weights_only=False)
     model.load_state_dict(ckpt["model_state"])
-    optim.load_state_dict(ckpt["optim_state"])
-    sched.load_state_dict(ckpt["sched_state"])
-    best_auc  = ckpt["best_auc"]
-    patience  = ckpt["patience"]
-    start_epoch = ckpt["epoch"] + 1
-    print(f"→ Loaded checkpoint from epoch {ckpt['epoch']}  (best AUC {best_auc:.4f})")
+    # fresh optimiser / scheduler if we are *fine-tuning*
+    if not fine_tune:            # normal resume
+        optim.load_state_dict(ckpt["optim_state"])
+        sched.load_state_dict(ckpt["sched_state"])
+        best_auc  = ckpt["best_auc"]
+        patience  = ckpt["patience"]
+        start_epoch = ckpt["epoch"] + 1
+        print(f"→ resumed from epoch {ckpt['epoch']}  (best AUC {best_auc:.4f})")
+    else:                        # fine-tune run
+        print("→ weights loaded, optimiser/scheduler re-initialised for fine-tuning")
 
 # ─────────────── CSV logger (append if resuming) ───────────────────────────
-log_mode = "a" if resume else "w"
-log_f = open(exp_dir / "logs.csv", log_mode, newline="")
-writer = csv.writer(log_f)
+log_path   = exp_dir / "logs.csv"
+file_exists = log_path.exists()
+log_f      = open(log_path, "a" if file_exists else "w", newline="")
+writer     = csv.writer(log_f)
+
 header = ["epoch","phase","loss","overall_acc","AUC","balanced_acc"] + \
          [f"ACC_class{c}" for c in classes]
-if not resume:               # only write header on a fresh run
-    writer.writerow(header)
 
+# write the header only if the file is new or empty
+if not file_exists or os.path.getsize(log_path) == 0:
+    writer.writerow(header)
 # ─────────────── training loop ─────────────────────────────────────────────
 for epoch in range(start_epoch, cfg["num_epochs"] + 1):
 

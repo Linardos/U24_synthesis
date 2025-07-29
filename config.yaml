@@ -9,12 +9,30 @@ root_dir: '/mnt/d/Datasets/EMBED/EMBED_binary_256x256/train'
 # root_dir: '/mnt/d/Datasets/CMMD/CMMD_binary_256x256/train'
 # root_dir: '/mnt/d/Datasets/CMMD/balanced_CMMD'
 data_dir: 'original' #'original' # 'stylegan_256x256', 'vqvae' , 'original'
-synth_data_dir: 'synthetic_guide8.0'
-real_percentage: 1.0 # use 0 for full synthetic, use 0.25, 0.5, 0.75 for mix
+synth_data_dir: 'synthetic_guide5.0'
+real_percentage:      1.0     # keep    this fraction of each class
+synthetic_multiplier: 0.0     # append (multiplier × kept_real) synthetic
+# for replacement of real with synthetic:
+# synth_mult = (1 - f) / f
+#     f = 0.7 → synth_mult ≈ 0.43 (70 % real / 30 % synth)
+#     f = 0.3 → synth_mult ≈ 2.33 (30 % real / 70 % synth)
+#     f = 0.5 → synth_mult = 1.00 (50 % / 50 %)
 
 num_classes: 2 #
+# ─ fine-tuning control ───────────────────────
+fine_tune:          True            # set → true to activate
+# fine_tune_ckpt:     093_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real_perc1.0               # absolute / relative path to best.pt or last.p
+fine_tune_ckpt:  096_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn0.25
+# fine_tune_ckpt:  095_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn0.5
+# fine_tune_ckpt:  097_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn0.75
+# fine_tune_ckpt:  094_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn1.0
+#  098_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.0
+#  099_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.25
+#  100_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.5
+#  101_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.75
+#  102_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn1.0
 
-# data handling
+# ─ data handling ───────────────────────
 dynamic_balanced_sampling: True
 majority_to_minority_ratio: 1.0
 batch_size: 32
@@ -38,9 +56,11 @@ model_name: convnext_tiny
 seed: 44
 sanity_check: False
 store_sample_per_epoch: True # to visualize images
-experiment_number: 91 # 62 onward is 12 vs 56
-# --------60 # 48-53 we test four class. 55 to 60 we test binary, last experiment  full synthetic in each case (53 and 60)
+experiment_number: 104 # 62 onward is 12 vs 56
+# --------93-97 is synthetic augmentation 25 - 100, geometric augs
+# --------98-102 is synthetic augmentation 0 - 100, intensity augs
+# --------103-107 is fine-tuning on geometric augs
 
-experiment_name: model_regularizations_test06smoothingLoss # four_class_pretrainedImagenet_frozenlayers #binary_classification #
+experiment_name: augExperiments # four_class_pretrainedImagenet_frozenlayers #binary_classification #
 # experiment_name: sanity_EMBED_multi_class_CV
 # experiment_name: ThreeDataDM_augmentations

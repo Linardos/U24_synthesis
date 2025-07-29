@@ -2,6 +2,7 @@ import os, uuid, numpy as np, torch, nibabel as nib
 import glob
 import re
 from tqdm import tqdm
+from pathlib import Path
 from model_architectures import MonaiDDPM
 device = "cuda:0" #if torch.cuda.is_available() else "cpu"
 
@@ -9,14 +10,17 @@ torch.manual_seed(2025)   # reproducible noise
 
 RESOLUTION = 256
 BATCH = 16       # keep RAM/VRAM sane; adjust to your GPU
-GUIDE_SCALE = 8.0
+GUIDE_SCALE = 5.0
 T = 1_000     
 
-ckpt_path = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/099_DDPM_3loss_binary_FalsexFalse/checkpoints/epoch=12-step=3731.ckpt"
-ckpt_path = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/106_DDPM_3loss_binary_try/checkpoints/epoch=18-step=2736.ckpt"
+root = Path("/home/locolinux2/U24_synthesis/lightning_synthesis/experiments")
+ckpt = "099_DDPM_3loss_binary_FalsexFalse/checkpoints/epoch=12-step=3731.ckpt"
+ckpt = "106_DDPM_3loss_binary_try/checkpoints/epoch=18-step=2736.ckpt"
+ckpt = "147_EMBED_DDPM_augmentationsNone_binary_31fixedmatching_12vs56/checkpoints/epoch=26-step=1566.ckpt"
+CKPT_PATH = root / ckpt
 
 model = (MonaiDDPM
-         .load_from_checkpoint(ckpt_path, map_location="cpu")   # keep GPU free
+         .load_from_checkpoint(CKPT_PATH, map_location="cpu") 
          .half()                                                # weights → fp16
          .to(device)
          .eval())

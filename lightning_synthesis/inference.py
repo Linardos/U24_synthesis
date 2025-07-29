@@ -9,7 +9,7 @@ torch.manual_seed(2025)   # reproducible noise
 
 RESOLUTION = 256
 BATCH = 32       # keep RAM/VRAM sane; adjust to your GPU
-GUIDE_SCALE = 8.0
+GUIDE_SCALE = 5.0
 T = 1_000     
 
 # ckpt_path = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/049_cDDPM_depth5_fixedScaling_256x256/checkpoints/epoch=22-step=7843.ckpt"
@@ -25,10 +25,7 @@ model = (MonaiDDPM
 
 # --- where to put the synthetic data ---------------------------------
 # ---------------------------------------------------------------------
-if "contrast" in ckpt_path:
-    SYN_ROOT = f"/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train/synthetic_guide{GUIDE_SCALE}_contrast-enhanced"
-else:
-    SYN_ROOT = f"/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train/synthetic_guide{GUIDE_SCALE}"
+SYN_ROOT = f"/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train/synthetic_guide{GUIDE_SCALE}"
 
 os.makedirs(SYN_ROOT, exist_ok=True)
 
