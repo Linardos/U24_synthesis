@@ -215,6 +215,18 @@ val_loader = DataLoader(val_set,
 
 
 # ─────────────── model & optimisation ─────────────────────────────────────
+
+def toggle_backbone(model, train_backbone: bool = True): 
+    """
+    Enable/disable grads for everything except the classification head.
+    Works with timm ConvNeXt / ResNet style (model.backbone).
+    Use only for fine-tuning
+    """
+    for n, p in model.named_parameters():
+        if n.startswith("backbone"):
+            p.requires_grad = train_backbone
+
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model  = get_model(cfg["model_name"], pretrained=True).to(device)
 backbone_params = []
@@ -227,10 +239,7 @@ optim = torch.optim.AdamW([
         {'params': head_params,     'lr': cfg["learning_rate"]}
 ])
 
-# optim     = torch.optim.Adam(
-#     filter(lambda p: p.requires_grad, model.parameters()),
-#     lr=cfg["learning_rate"], weight_decay=cfg["weight_decay"]
-# )
+
 criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
 
@@ -274,8 +283,16 @@ header = ["epoch","phase","loss","overall_acc","AUC","balanced_acc"] + \
 if not file_exists or os.path.getsize(log_path) == 0:
     writer.writerow(header)
 # ─────────────── training loop ─────────────────────────────────────────────
+freeze_epochs = cfg.get("freeze_backbone_epochs", 0)
 for epoch in range(start_epoch, cfg["num_epochs"] + 1):
-
+    # Toggle backbone training state exactly once when epoch == 1 and when it unfreezes
+    if epoch == 1 and freeze_epochs > 0:
+        toggle_backbone(model, train_backbone=False)
+        print(f"🥶  Backbone frozen for the next {freeze_epochs} epoch(s)")
+    if epoch == freeze_epochs + 1 and freeze_epochs > 0:
+        toggle_backbone(model, train_backbone=True)
+        print("🧊→🔥  Backbone unfrozen – fine-tuning whole network")
+        
     # -- pick loader --------------------------------------------------
     if cfg['dynamic_balanced_sampling']:
         train_loader = make_balanced_loader(

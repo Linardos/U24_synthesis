@@ -66,15 +66,17 @@ def main(exp_dirs):
 if __name__ == "__main__":
     
     experiments_list = [
-        # "./experiments/083__EMBED_binary_256x256_holdout_resnet50_model_regularizations_test04lowerLR_seed44_real_perc1.0",
+
+        # "./experiments/083__EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test04lowerLR_seed44_real_perc1.0",
         # "./experiments/087_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsbasic_real_perc1.0",
+        # "./experiments/088_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real_perc1.0",
         # "./experiments/089_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsintensity_real_perc1.0",
         #,        
-        "./experiments/088_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real_perc1.0",
-        "./experiments/094_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn1.0",
-        "./experiments/095_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn0.5",
-        "./experiments/096_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn0.25",
-        "./experiments/097_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn0.75",
+        # "./experiments/088_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real_perc1.0",
+        # "./experiments/094_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn1.0",
+        # "./experiments/095_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn0.5",
+        # "./experiments/096_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn0.25",
+        # "./experiments/097_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn0.75",
         # #,        
         # "./experiments/098_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.0",
         # "./experiments/099_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.25",
@@ -82,10 +84,26 @@ if __name__ == "__main__":
         # "./experiments/101_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.75",
         # "./experiments/102_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn1.0",
         # #,
-        "./experiments/104_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_096_eal1.0_syn0.25"
- 
- 
-
+        # "./experiments/104_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_096_eal1.0_syn0.25",
+        # "./experiments/105_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_095_real1.0_syn0.5",
+        # "./experiments/106_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_097_eal1.0_syn0.75/",
+        # "./experiments/107_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_094_real1.0_syn1.0",
+        # "./experiments/108_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_098__real1.0_syn0.0",
+        # #,
+        # "./experiments/109_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_099_real1.0_syn0.25",
+        # "./experiments/110_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_100__real1.0_syn0.5",
+        # "./experiments/111_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_101_real1.0_syn0.75",
+        # "./experiments/112_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_102__real1.0_syn1.0",
+        # #,
+        # "./experiments/113_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.0_fTune_099_real1.0_syn0.25",
+        # "./experiments/114_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.0_fTune_100__real1.0_syn0.5",
+        # "./experiments/115_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.0_fTune_101_real1.0_syn0.75",
+        # "./experiments/116_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.0_fTune_102__real1.0_syn1.0"
+        # #,
+        "./experiments/117_EMBED_binary_256x256_holdout_convnext_tiny_FTune_Freeze5_seed44_Augsgeometric_real1.0_syn0.0_fTune_096_real1.0_syn0.25",
+        "./experiments/118_EMBED_binary_256x256_holdout_convnext_tiny_FTune_Freeze5_seed44_Augsgeometric_real1.0_syn0.0_fTune_095__real1.0_syn0.5",
+        "./experiments/119_EMBED_binary_256x256_holdout_convnext_tiny_FTune_Freeze5_seed44_Augsgeometric_real1.0_syn0.0_fTune_097_real1.0_syn0.75",
+        "./experiments/120_EMBED_binary_256x256_holdout_convnext_tiny_FTune_Freeze5_seed44_Augsgeometric_real1.0_syn0.0_fTune_094__real1.0_syn1.0",
         
     ]
     main(experiments_list)
