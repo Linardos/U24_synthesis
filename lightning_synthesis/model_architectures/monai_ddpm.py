@@ -96,6 +96,7 @@ class MonaiDDPM(pl.LightningModule):
         mse = F.mse_loss(eps_hat.float(), eps.float()) # minimize cost of predicting noise
 
         if self.w_mse == 1.0:
+            loss = mse
             self.log("train_loss", loss, prog_bar=True)
         elif self.w_hf == 0:
             # reconstruct x0̂ for SSIM

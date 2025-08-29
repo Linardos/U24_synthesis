@@ -148,45 +148,65 @@ tr_idx, val_idx = train_test_split(
 rng = np.random.default_rng(seed)
 
 # ── build mixed train subset ──────────────────────────────────────────────
-synth_pool_by_cls = {c: np.where(synth_lbl == c)[0] for c in classes}
+if cfg['sanity_check']:
+    # grab a *tiny* stratified subset from tr_idx
+    n_sanity   = max(1, int(round(len(tr_idx) * 0.05)))
+    sanity_idx = rng.choice(tr_idx, size=n_sanity, replace=False)
 
-keep_real, add_synth = [], []
-for c in classes:
-    cls_idx = tr_idx[real_lbl[tr_idx] == c]
-    rng.shuffle(cls_idx)
+    print(f"🧪  Sanity-check mode ON — over-fitting {n_sanity} samples")
 
-    # ❶ decide how many real images to keep
-    n_real_keep = int(round(len(cls_idx) * real_fraction))
-    keep_real.extend(cls_idx[:n_real_keep])
+    train_set     = Subset(real_ds, sanity_idx)
+    val_set       = Subset(real_ds, sanity_idx)          # identical copy
+    train_samples = [real_ds.samples[i] for i in sanity_idx]
 
-    # ❷ decide how many synthetic images to add
-    if real_fraction > 0:
-        base = n_real_keep                       # normal case
-    else:
-        base = len(cls_idx)                      # “only-synthetic” case
+    keep_real, add_synth = sanity_idx, []                # for bookkeeping
+    cfg['dynamic_balanced_sampling'] = False             # keep loaders simple
+else:
+    synth_pool_by_cls = {c: np.where(synth_lbl == c)[0] for c in classes}
 
-    n_syn_needed = int(round(base * synth_mult))
+    keep_real, add_synth = [], []
+    for c in classes:
+        cls_idx = tr_idx[real_lbl[tr_idx] == c]
+        rng.shuffle(cls_idx)
 
-    pool = synth_pool_by_cls[c]
-    if n_syn_needed and len(pool):
-        add_synth.extend(
-            rng.choice(pool, size=min(n_syn_needed, len(pool)), replace=False)
-        )
-    elif n_syn_needed:
-        print(f"⚠️  not enough synthetic samples for class {c} "
-              f"(requested {n_syn_needed}, found {len(pool)})")
+        # ❶ decide how many real images to keep
+        n_real_keep = int(round(len(cls_idx) * real_fraction))
+        keep_real.extend(cls_idx[:n_real_keep])
+
+        # ❷ decide how many synthetic images to add
+        if real_fraction > 0:
+            base = n_real_keep                       # normal case
+        else:
+            base = len(cls_idx)                      # “only-synthetic” case
+
+        n_syn_needed = int(round(base * synth_mult))
+
+        pool = synth_pool_by_cls[c]
+        if n_syn_needed and len(pool):
+            add_synth.extend(
+                rng.choice(pool, size=min(n_syn_needed, len(pool)), replace=False)
+            )
+        elif n_syn_needed:
+            print(f"⚠️  not enough synthetic samples for class {c} "
+                f"(requested {n_syn_needed}, found {len(pool)})")
 
 
-train_set = ConcatDataset([
-    Subset(real_ds,  keep_real),
-    Subset(synth_ds, add_synth)
-])
-val_set   = Subset(val_ds, val_idx)   # 100 % real
-# this list powers the on-the-fly balanced loader
-train_samples = (
-    [real_ds.samples[i]  for i in keep_real] +
-    [synth_ds.samples[i] for i in add_synth]
-)
+    train_set = ConcatDataset([
+        Subset(real_ds,  keep_real),
+        Subset(synth_ds, add_synth)
+    ])
+    val_set   = Subset(val_ds, val_idx)   # 100 % real
+    # this list powers the on-the-fly balanced loader
+    train_samples = (
+        [real_ds.samples[i]  for i in keep_real] +
+        [synth_ds.samples[i] for i in add_synth]
+    )
+    json.dump(
+        {"train_real": list(map(int, keep_real)),
+        "train_synth": list(map(int, add_synth)),
+        "val_real":   list(map(int, val_idx))},
+        open(exp_dir / "indices.json", "w"), indent=2
+    )
 
 print(f"┌──── train sampling summary ────")
 print(f"│ kept real      : {len(keep_real):5d}")
@@ -195,12 +215,6 @@ print(f"│ total train    : {len(keep_real)+len(add_synth):5d}")
 print(f"└──────────────────────────")
 
 
-json.dump(
-    {"train_real": list(map(int, keep_real)),
-     "train_synth": list(map(int, add_synth)),
-     "val_real":   list(map(int, val_idx))},
-    open(exp_dir / "indices.json", "w"), indent=2
-)
 
 if not cfg['dynamic_balanced_sampling']:
     train_loader = DataLoader(
@@ -292,7 +306,7 @@ for epoch in range(start_epoch, cfg["num_epochs"] + 1):
     if epoch == freeze_epochs + 1 and freeze_epochs > 0:
         toggle_backbone(model, train_backbone=True)
         print("🧊→🔥  Backbone unfrozen – fine-tuning whole network")
-        
+
     # -- pick loader --------------------------------------------------
     if cfg['dynamic_balanced_sampling']:
         train_loader = make_balanced_loader(

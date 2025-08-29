@@ -52,9 +52,11 @@ ckpt = "124_DDPM_binary_11perepoch_12vs56/checkpoints/epoch=26-step=1566.ckpt"
 # ckpt = "143_DDPM_augmentationsgeometric_binary_31fixed_12vs56/checkpoints/epoch=10-step=957.ckpt" # just a test for some metrics
 # ckpt = "144_CMMD_DDPM_augmentationsgeometric_binary_13fixed_12vs56/checkpoints/epoch=12-step=962.ckpt"
 # ckpt = "145_CMMD_DDPM_augmentationsNone_binary_11balancing_12vs56/checkpoints/epoch=29-step=990.ckpt"
-# ----- EMBED
+# ----- 
 ckpt = "147_EMBED_DDPM_augmentationsNone_binary_31fixedmatching_12vs56/checkpoints/epoch=26-step=1566.ckpt" # simple, no augs no balancing
-
+# ablation test
+# ckpt = "148_EMBED_DDPM_augmentationsNone_ablation_MSEonly/checkpoints/epoch=15-step=928.ckpt"
+ckpt = "149_EMBED_DDPM_augmentationsNone_ablation_MSEandMS_SSIM/checkpoints/epoch=26-step=1566.ckpt"
 CKPT_PATH = root / ckpt
 
 # CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/094_DDPM_MS-SSIM_10perc_HF_5perc_val/checkpoints/epoch=12-step=1690.ckpt" # ACTUAL GOLD
@@ -65,7 +67,7 @@ NAME_TAG = f"{ckpt[:4]}"
 RESOLUTION = 256
 BATCH      = 16
 N_EVAL     = 200                       # samples / class
-SCALES     = [0,4,5,6,7,8] #,9,10, 0,4]#[0, 4, 7, 8]
+SCALES     = [0,4]#,5,6,7,8] #,9,10, 0,4]#[0, 4, 7, 8]
 EVAL_SET = 'test'
 # ORACLE_DIR  = "072_resnet50_CMMD_binary_12vs56_seed44_real_perc1.0" # "062_resnet50_binary_12vs56_seed44_real_perc1.0"
 ORACLE_DIR  = "073_resnet50_CMMD_balanced_binary_12vs56_seed44_real_perc1.0"
@@ -100,9 +102,10 @@ num_classes = len(categories)     # <-- used by oracle
 # ── caching ─────────────────────────────────────────────────────────────
 CACHE_SYNTH   = True                     # flip off if you really want fresh draws
 CACHE_ROOT    = Path(f"/mnt/d/Datasets/{DATASET}/synth_cache")      # anything inside .gitignore
-ckpt_tag      = CKPT_PATH.parent.name    # e.g. 140_DDPM_augmentationsgeometric…
+ckpt_tag      = CKPT_PATH.parent.parent.name    # e.g. 140_DDPM_augmentationsgeometric…
 def load_or_generate(model, label_id, class_name, scale, n):
     save_dir  = CACHE_ROOT / ckpt_tag / f"gs{scale}"
+    print(f"Caching at {save_dir}")
     save_dir.mkdir(parents=True, exist_ok=True)
     save_file = save_dir / f"{class_name}.pt"
 
