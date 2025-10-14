@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # ------------------------------------------------------------
-#  Breast-cancer C-view  ➜  512×512 NIfTI dataset builder
+#  Breast-cancer C-view  ➜  256×256 NIfTI dataset builder
 #  – keeps ALL malignant cases, subsamples other classes
+#  – patient-level (empi_anon) stratified train/val/test split
 # ------------------------------------------------------------
 import os, multiprocessing as mp
 import pandas as pd
@@ -11,15 +12,19 @@ from pydicom import dcmread
 from nibabel import Nifti1Image
 from sklearn.model_selection import train_test_split
 from scipy.ndimage import zoom
+from pydicom.tag import Tag
 
 RESIZE_DIM = 256
+RNG_SEED   = 42
+
 # ------------------------------------------------------------
-# 0.  Load metadata  ▸ map BI-RADS codes → four categories
+# 0.  Load metadata  ▸ map BI-RADS codes → coarse categories
 # ------------------------------------------------------------
 csv_path = "/mnt/d/Datasets/EMBED/tables/EMBED_cleaned_metadata.csv"
 data = pd.read_csv(csv_path)
 
 birads_map = {
+    # "A": "further eval"
     "N": "benign",
     "B": "benign",
     # "P": "probably_benign",
@@ -27,70 +32,109 @@ birads_map = {
     "M": "malignant",
     "K": "malignant",
 }
-
-# map BI-RADS → coarse category labels
 data["category"] = data["asses"].map(birads_map).fillna("unknown")
 
 # 🔸 ignore records whose category is still unknown
-data = data[data["category"] != "unknown"]
+data = data[data["category"] != "unknown"].copy()
 
 # 🔹 ignore magnification views
-data = data[data["spot_mag"] != 1]
+data = data[data["spot_mag"] != 1].copy()
 
 # ------------------------------------------------------------
-# 1.  Cap dataset size per category – 3 : 2 : 2 : 1 matching
+# 1.  Cap dataset size per category – keep all malignant
 # ------------------------------------------------------------
-# ➊  Count malignants after filtering
-malignant_count = len(data[data["category"] == "malignant"])
+malignant_count = (data["category"] == "malignant").sum()
 if malignant_count == 0:
     raise ValueError("No malignant cases left after filtering!")
 
-# ➋  Build the desired‑count dictionary on the fly
 desired_counts = {
-    "benign":            3 * malignant_count,
-    "malignant":         None,              # always keep all malignants
+    "benign":      3 * malignant_count,
+    "malignant":   None,   # keep all
 }
-
 print("Target sample sizes per class:")
 for k, v in desired_counts.items():
-    print(f"  {k:<17} : {v if v is not None else 'ALL'}")
+    print(f"  {k:<10} : {v if v is not None else 'ALL'}")
 
-# ➌  Function to trim each group to its cap
 def _cap(g):
-    limit = desired_counts[g.name]          # every key exists by construction
-    if limit is None or len(g) <= limit:    # keep all if limit is None
+    limit = desired_counts[g.name]
+    if limit is None or len(g) <= limit:
         return g
-    return g.sample(n=limit, random_state=42)
+    return g.sample(n=limit, random_state=RNG_SEED)
 
-# ➍  Apply the cap
-data = data.groupby("category", group_keys=False).apply(_cap)
+data = data.groupby("category", group_keys=False).apply(_cap).reset_index(drop=True)
 
 # ------------------------------------------------------------
-# 2.  Stratified 80/20 split on the *trimmed* dataframe
+# 2.  Patient-level label & patient-stratified 80/10/10 split
+#     - patient label = malignant if ANY record malignant, else benign
+#     - ensure all rows for a given empi_anon go to the same split
 # ------------------------------------------------------------
-train, test = train_test_split(
-    data,
-    test_size=0.20,
-    random_state=42,
-    stratify=data["category"],
+# Build patient label table
+patient_labels = (
+    data.groupby("empi_anon")["category"]
+        .apply(lambda s: "malignant" if (s == "malignant").any() else "benign")
+        .rename("patient_label")
+        .reset_index()
 )
 
-# Quick sanity check – prints counts to prove the 80 / 20 split
-def _show_split(name, df):
-    print(f"\n{name} counts:")
-    print(df["category"].value_counts().to_string())
-_show_split("TRAIN", train)
-_show_split("TEST",  test)
+# First split: train_val vs test (80/20), stratified by patient label
+train_val_pat, test_pat = train_test_split(
+    patient_labels,
+    test_size=0.20,
+    random_state=RNG_SEED,
+    stratify=patient_labels["patient_label"],
+)
 
+# Second split: train vs val from train_val (to yield ~70/10/20 overall)
+val_fraction_of_trainval = 0.125  # 0.125 * 0.80 ≈ 0.10 overall
+train_pat, val_pat = train_test_split(
+    train_val_pat,
+    test_size=val_fraction_of_trainval,
+    random_state=RNG_SEED,
+    stratify=train_val_pat["patient_label"],
+)
+
+# Turn patient sets into fast lookup
+train_ids = set(train_pat["empi_anon"])
+val_ids   = set(val_pat["empi_anon"])
+test_ids  = set(test_pat["empi_anon"])
+
+# Map rows to splits by patient membership
+def _which_split(empi):
+    if empi in train_ids: return "train"
+    if empi in val_ids:   return "val"
+    if empi in test_ids:  return "test"
+    return "unknown"
+
+data["split"] = data["empi_anon"].map(_which_split)
+assert (data["split"] != "unknown").all(), "Some rows were not assigned a split!"
+
+# Extract split frames
+train = data[data["split"] == "train"].copy()
+val   = data[data["split"] == "val"].copy()
+test  = data[data["split"] == "test"].copy()
+
+# Sanity: show image-level and patient-level counts
+def _show_split(name, df):
+    print(f"\n{name} (image-level) counts:")
+    print(df["category"].value_counts().to_string())
+
+    pats = df["empi_anon"].unique()
+    pat_df = patient_labels[patient_labels["empi_anon"].isin(pats)]
+    print(f"{name} (patient-level) counts:")
+    print(pat_df["patient_label"].value_counts().to_string())
+
+_show_split("TRAIN", train)
+_show_split("VAL",   val)
+_show_split("TEST",  test)
 
 # ------------------------------------------------------------
 # 3.  Folder layout
 # ------------------------------------------------------------
 base_dir   = "/mnt/d/Datasets/EMBED/images/"
 output_dir = f"/mnt/d/Datasets/EMBED/EMBED_binary_12vs56_{RESIZE_DIM}x{RESIZE_DIM}"
-categories = list(desired_counts.keys())
+categories = ["benign", "malignant"]
 
-for split in ["train", "test"]:
+for split in ["train", "val", "test"]:
     for cat in categories:
         os.makedirs(os.path.join(output_dir, split, cat), exist_ok=True)
     print(f"{split.capitalize()} directories created!")
@@ -115,8 +159,6 @@ def convert_dicom_to_nifti(dicom_path, output_path, target_size=(RESIZE_DIM, RES
 # ------------------------------------------------------------
 # 5.  Worker helpers
 # ------------------------------------------------------------
-from pydicom.tag import Tag         # new import at top of file
-
 IMPLANT_TAG = Tag(0x0028, 0x1300)   # Breast Implant Present (CS)
 
 def _process_one(row, split):
@@ -136,14 +178,14 @@ def _process_one(row, split):
         implant_flag = str(hdr.get(IMPLANT_TAG, "")).upper()
         if implant_flag == "YES":
             print(f"Skip implant   : {src}")
-            return               # drop the file
+            return
     except Exception as e:
-        # If the header can’t be read, fall through and let the pixel read fail later
         print(f"Header read err : {src} → {e}")
 
-    # ── normal processing ───────────────────────────────────
-
-    dst_folder = os.path.join(output_dir, split, cat, os.path.splitext(os.path.basename(src))[0])
+    # ── normal processing ──────────────────────────────
+    dst_folder = os.path.join(
+        output_dir, split, cat, os.path.splitext(os.path.basename(src))[0]
+    )
     os.makedirs(dst_folder, exist_ok=True)
 
     dst_nifti = os.path.join(dst_folder, "slice.nii.gz")
@@ -161,6 +203,9 @@ def _process_split(df, split):
 # ------------------------------------------------------------
 print("Processing train files …")
 _process_split(train, "train")
+
+print("Processing val files …")
+_process_split(val, "val")
 
 print("Processing test files …")
 _process_split(test, "test")

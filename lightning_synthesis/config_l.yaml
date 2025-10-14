@@ -11,7 +11,7 @@ model: DDPM # GAN or DDPM
 augmentations: None # geometric or all or None
 
 # Training Hyperparameters
-batch_size: 16  # Increased for more stable gradients, use 16 if also running evaluate.py otherwise 24
+batch_size: 8  # Increased for more stable gradients, use 16 if also running evaluate.py otherwise 24
 learning_rate: 0.00001
 num_epochs: 50  
 samples_per_class: 1838 # ignored if dynamic_balanced_sampling is True // Note that Malignant = 1148, or 1838 if both 5 and 6. Sample twice or thrice that.
@@ -21,7 +21,7 @@ benign_to_malignant_ratio: 1.0 # for dynamic sampling, match how many benign per
 ## Malignant: 1148
 
 # Experiment Tracking
-experiment_name: 'ablation_MSEandMS_SSIM'
+experiment_name: 'composite_loss_weights_70_20_10_ablation'
 # experiment_name: '044_DDPM_deeper_128x128' # use suffix and full existing name to continue from checkpoint
 
 # Sanity checks

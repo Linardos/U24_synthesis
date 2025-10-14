@@ -6,10 +6,11 @@
 # root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train'
 # root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_256x256_binary/train'
 root_dir: '/mnt/d/Datasets/EMBED/EMBED_binary_256x256/train'
-root_dir: '/mnt/d/Datasets/CMMD/CMMD_binary_256x256/train'
+# root_dir: '/mnt/d/Datasets/CMMD/CMMD_binary_256x256/train'
 # root_dir: '/mnt/d/Datasets/CMMD/balanced_CMMD'
 data_dir: 'original' #'original' # 'stylegan_256x256', 'vqvae' , 'original'
-synth_data_dir: 'synthetic_guide5.0'
+# synth_data_dir: 'synthetic_guide5.0'
+synth_data_dir: 'synthetic_guide3.0'
 real_percentage:      1.0     # keep    this fraction of each class
 synthetic_multiplier: 0.0     # append (multiplier × kept_real) synthetic
 # for replacement of real with synthetic:
@@ -22,7 +23,7 @@ num_classes: 2 #
 # ─ fine-tuning control ───────────────────────
 fine_tune:          True            # set → true to activate
 # fine_tune_ckpt:     093_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real_perc1.0               # absolute / relative path to best.pt or last.p
-fine_tune_ckpt:  092_EMBED_binary_256x256_holdout_convnext_tiny_redo_noSynth_seed44_Augsgeometric_real1.0_syn0.0
+# fine_tune_ckpt:  092_EMBED_binary_256x256_holdout_convnext_tiny_redo_noSynth_seed44_Augsgeometric_real1.0_syn0.0
 # fine_tune_ckpt:  096_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn0.25
 # fine_tune_ckpt:  095_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn0.5
 # fine_tune_ckpt:  097_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn0.75
@@ -32,8 +33,12 @@ fine_tune_ckpt:  092_EMBED_binary_256x256_holdout_convnext_tiny_redo_noSynth_see
 # fine_tune_ckpt:  100_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.5
 # fine_tune_ckpt:  101_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.75
 # fine_tune_ckpt:  102_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn1.0
+fine_tune_ckpt:  130_EMBED_binary_256x256_holdout_convnext_tiny_syngscale3_seed44_Augsbasic_real1.0_syn0.25
+fine_tune_ckpt: 130_EMBED_binary_256x256_holdout_convnext_tiny_syngscale3_seed44_Augsbasic_real1.0_syn0.5
+fine_tune_ckpt: 130_EMBED_binary_256x256_holdout_convnext_tiny_syngscale3_seed44_Augsbasic_real1.0_syn0.75
+fine_tune_ckpt: 130_EMBED_binary_256x256_holdout_convnext_tiny_syngscale3_seed44_Augsbasic_real1.0_syn1.0
 # ------------------------------------------------
-freeze_backbone_epochs: 0   # 0  → never freeze
+freeze_backbone_epochs: 10   # 0  → never freeze
 # ------------------------------------------------
 # ─ data handling ───────────────────────
 dynamic_balanced_sampling: True
@@ -43,6 +48,7 @@ augmentations: basic # basic, geometric, intensity, None
 
 learning_rate: 0.0001 # default 0.0003. Go higher for fine-tune.
 weight_decay: 0.00001
+early_stopping_metric: "balanced_acc"   # options: balanced_acc | auc | val_loss
 early_stopping_patience: 20
 num_epochs: 100
 val_split: 0.1 # only for hold-out not cval
@@ -58,7 +64,7 @@ model_name: convnext_tiny #convnext_tiny
   # - vgg19
 seed: 44
 store_sample_per_epoch: True # to visualize images
-experiment_number: 129 # 62 onward is 12 vs 56
+experiment_number: 132 # 62 onward is 12 vs 56
 # --------92-97 is synthetic augmentation 0 - 100, geometric augs
 # --------98-102 is synthetic augmentation 0 - 100, intensity augs
 # --------103-107 is fine-tuning on geometric augs
@@ -67,10 +73,12 @@ experiment_number: 129 # 62 onward is 12 vs 56
 # --------117-120 is fine-tuning on geometric augs, with frozen layers and same LR
 # --------121-124 is fine-tuning on geometric augs, with frozen layers and increased LR (0.001)
 # --------125-     CMMD model selection
+# --------130 synth aug 25-100
+# --------134 fine-tune synth aug 25-100
 
 # ───────────── sanity-check dial ─────────────
 sanity_check: False        # turn ON to over-fit a tiny slice
 
-experiment_name: fine_tune_fromEMBED #FTune_Freeze5 # four_class_pretrainedImagenet_frozenlayers #binary_classification #
+experiment_name: syngscale3 #FTune_Freeze5 # four_class_pretrainedImagenet_frozenlayers #binary_classification #
 # experiment_name: sanity_EMBED_multi_class_CV
 # experiment_name: ThreeDataDM_augmentations

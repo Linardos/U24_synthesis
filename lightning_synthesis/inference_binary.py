@@ -10,7 +10,7 @@ torch.manual_seed(2025)   # reproducible noise
 
 RESOLUTION = 256
 BATCH = 16       # keep RAM/VRAM sane; adjust to your GPU
-GUIDE_SCALE = 5.0
+GUIDE_SCALE = 3.0
 T = 1_000     
 
 root = Path("/home/locolinux2/U24_synthesis/lightning_synthesis/experiments")
@@ -27,7 +27,7 @@ model = (MonaiDDPM
 
 # --- where to put the synthetic data ---------------------------------
 # ---------------------------------------------------------------------
-SYN_ROOT = f"/mnt/d/Datasets/EMBED/EMBED_clean_256x256_binary/train/synthetic_guide{GUIDE_SCALE}"
+SYN_ROOT = f"/mnt/d/Datasets/EMBED/EMBED_binary_256x256/train/synthetic_guide{GUIDE_SCALE}"
 
 os.makedirs(SYN_ROOT, exist_ok=True)
 

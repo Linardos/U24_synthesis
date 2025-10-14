@@ -10,8 +10,10 @@ from torch.utils.data import DataLoader, Subset, ConcatDataset
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
-    roc_auc_score, balanced_accuracy_score, confusion_matrix
+    roc_auc_score, balanced_accuracy_score, confusion_matrix,
+    average_precision_score, f1_score
 )
+
 from tqdm import tqdm
 
 import torchvision.transforms as T
@@ -260,7 +262,8 @@ criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 sched = CosineAnnealingLR(optim, T_max=cfg["num_epochs"])
 
 # ─────────────── load checkpoint (resume if continuing interrupted run, or fine-tune from a previous experiment) ────────────────────────────────
-start_epoch, best_auc, patience = 1, -np.inf, 0
+start_epoch, best_metric, patience = 1, -np.inf, 0
+early_name = cfg.get("early_stopping_metric", "balanced_acc").lower()
 ckpt_path = exp_dir / "last.pt"
 if fine_tune and fine_tune_ckpt:                         # ← NEW  ❶
     ckpt_path_to_load = Path("experiments") / fine_tune_ckpt / "last.pt"
@@ -277,10 +280,10 @@ if ckpt_path_to_load:
     if not fine_tune:            # normal resume
         optim.load_state_dict(ckpt["optim_state"])
         sched.load_state_dict(ckpt["sched_state"])
-        best_auc  = ckpt["best_auc"]
+        best_metric = ckpt.get("best_metric", ckpt.get("best_auc", -np.inf))
         patience  = ckpt["patience"]
         start_epoch = ckpt["epoch"] + 1
-        print(f"→ resumed from epoch {ckpt['epoch']}  (best AUC {best_auc:.4f})")
+        print(f"→ resumed from epoch {ckpt['epoch']}  (best {early_name} {best_metric:.4f})")
     else:                        # fine-tune run
         print("→ weights loaded, optimiser/scheduler re-initialised for fine-tuning")
 
@@ -353,6 +356,7 @@ for epoch in range(start_epoch, cfg["num_epochs"] + 1):
         auc = (roc_auc_score(all_y, all_p[:,1])
                if len(classes) == 2 else
                roc_auc_score(all_y, all_p, multi_class='ovr'))
+        balanced_acc = balanced_accuracy_score(all_y, preds)
 
         row = [epoch, phase,
                run_loss / total,
@@ -364,18 +368,26 @@ for epoch in range(start_epoch, cfg["num_epochs"] + 1):
 
         print(f"{phase:5s}  loss={row[2]:.4f}  acc={row[3]:.4f}  acc_malignant={per_cls_acc[1]:.4f}  acc_benign={per_cls_acc[0]:.4f}   AUC={row[4]:.4f}")
 
+
         if phase == "val":
-            if auc > best_auc + 0.001:
-                best_auc, patience = auc, 0
+            
+            metric_map = {
+                "auc": auc,
+                "balanced_acc": balanced_acc,
+                "val_loss": -row[2],  # negate because lower loss is better
+            }
+            current = metric_map.get(early_name, balanced_acc)  # default to BA
+            if current > best_metric + 0.001:
+                best_metric, patience = current, 0
                 torch.save({
                     "epoch":      epoch,
                     "model_state":model.state_dict(),
                     "optim_state":optim.state_dict(),
                     "sched_state":sched.state_dict(),
-                    "best_auc":   best_auc,
+                    "best_metric":   best_metric,
                     "patience":   patience,
                 }, ckpt_path)
-                print("✓ checkpointed (AUC ↑)")
+                print(f"✓ checkpointed ({early_name} ↑)")
             else:
                 patience += 1
 

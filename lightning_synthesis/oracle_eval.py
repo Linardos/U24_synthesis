@@ -35,7 +35,7 @@ from models import get_model                       # noqa: E402
 SEED         = 42          # reproducibility everywhere
 RESOLUTION   = 256         # image side length (for transforms)
 BATCH        = 4           # Oracle batch size (fp16 OK)
-N_EVAL       = 200         # images sampled *per class* to evaluate
+N_EVAL       = 200 # 2000       # images sampled *per class* to evaluate
 EVAL_SET = 'test'
 CONFIG_YAML  = "config_l.yaml"  # same config file as before
 ORACLE_DIR  = "072_resnet50_CMMD_binary_12vs56_seed44_real_perc1.0" # "062_resnet50_binary_12vs56_seed44_real_perc1.0"

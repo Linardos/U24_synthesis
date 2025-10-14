@@ -38,25 +38,30 @@ ckpt  = "054_DDPM_default512_256x256/checkpoints/epoch=04-step=1435.ckpt" # FID 
 ckpt  = "057_DDPM_seed2025_cropped_256x256/checkpoints/epoch=04-step=1435.ckpt"
 ckpt = "063_DDPM_contrast-aug-20percent_256x256/checkpoints/epoch=04-step=1435.ckpt"
 ckpt = "092_DDPM_MS-SSIM_10perc_HF_5perc_256x256/checkpoints/epoch=18-step=2736.ckpt" # GOLD
-ckpt = "106_DDPM_3loss_binary_try/checkpoints/epoch=18-step=2736.ckpt" # functional binary
-ckpt = "107_DDPM_3loss_4class_retry/checkpoints/epoch=17-step=3456.ckpt"
-ckpt = "113_DDPM_binary_epochwise_balanced/checkpoints/epoch=30-step=1116.ckpt" # dynamic epoch-wise data balancing 
-ckpt = "114_DDPM_binary_epochwise_balanced_12vs56/checkpoints/epoch=22-step=1771.ckpt" # more data
-ckpt = "121_DDPM_binary_21fixedmatching_12vs56/checkpoints/epoch=20-step=1827.ckpt" #  just to check how epoch-wise sampling affects things
-ckpt = "120_DDPM_binary_21perepoch_12vs56/checkpoints/epoch=19-step=1740.ckpt" # seems decent! Even guidance scale 4 gets 70% accuracy.
-ckpt = "123_DDPM_binary_11_5perepoch_12vs56/checkpoints/epoch=20-step=1512.ckpt" # 
-ckpt = "124_DDPM_binary_11perepoch_12vs56/checkpoints/epoch=26-step=1566.ckpt"
-# ckpt = "140_DDPM_augmentationsgeometric_binary_11perepoch_12vs56/checkpoints/epoch=26-step=1566.ckpt" # AUGMENTATIONS ARE AWESOME! 1:1
-# ckpt = "141_DDPM_augmentationsgeometric_binary_11_5perepoch_12vs56/checkpoints/epoch=20-step=1512.ckpt" # augmentations, but 1.5:1
-# ckpt = "142_DDPM_augmentationsall_binary_11perepoch_12vs56/checkpoints/epoch=21-step=1276.ckpt"
-# ckpt = "143_DDPM_augmentationsgeometric_binary_31fixed_12vs56/checkpoints/epoch=10-step=957.ckpt" # just a test for some metrics
-# ckpt = "144_CMMD_DDPM_augmentationsgeometric_binary_13fixed_12vs56/checkpoints/epoch=12-step=962.ckpt"
-# ckpt = "145_CMMD_DDPM_augmentationsNone_binary_11balancing_12vs56/checkpoints/epoch=29-step=990.ckpt"
-# ----- 
-ckpt = "147_EMBED_DDPM_augmentationsNone_binary_31fixedmatching_12vs56/checkpoints/epoch=26-step=1566.ckpt" # simple, no augs no balancing
+# ckpt = "106_DDPM_3loss_binary_try/checkpoints/epoch=18-step=2736.ckpt" # functional binary
+# ckpt = "107_DDPM_3loss_4class_retry/checkpoints/epoch=17-step=3456.ckpt"
+# ckpt = "113_DDPM_binary_epochwise_balanced/checkpoints/epoch=30-step=1116.ckpt" # dynamic epoch-wise data balancing 
+# ckpt = "114_DDPM_binary_epochwise_balanced_12vs56/checkpoints/epoch=22-step=1771.ckpt" # more data
+# ckpt = "121_DDPM_binary_21fixedmatching_12vs56/checkpoints/epoch=20-step=1827.ckpt" #  just to check how epoch-wise sampling affects things
+# ckpt = "120_DDPM_binary_21perepoch_12vs56/checkpoints/epoch=19-step=1740.ckpt" # seems decent! Even guidance scale 4 gets 70% accuracy.
+# ckpt = "123_DDPM_binary_11_5perepoch_12vs56/checkpoints/epoch=20-step=1512.ckpt" # 
+# ckpt = "124_DDPM_binary_11perepoch_12vs56/checkpoints/epoch=26-step=1566.ckpt"
+# # ckpt = "140_DDPM_augmentationsgeometric_binary_11perepoch_12vs56/checkpoints/epoch=26-step=1566.ckpt" # AUGMENTATIONS ARE AWESOME! 1:1
+# # ckpt = "141_DDPM_augmentationsgeometric_binary_11_5perepoch_12vs56/checkpoints/epoch=20-step=1512.ckpt" # augmentations, but 1.5:1
+# # ckpt = "142_DDPM_augmentationsall_binary_11perepoch_12vs56/checkpoints/epoch=21-step=1276.ckpt"
+# # ckpt = "143_DDPM_augmentationsgeometric_binary_31fixed_12vs56/checkpoints/epoch=10-step=957.ckpt" # just a test for some metrics
+# # ckpt = "144_CMMD_DDPM_augmentationsgeometric_binary_13fixed_12vs56/checkpoints/epoch=12-step=962.ckpt"
+# # ckpt = "145_CMMD_DDPM_augmentationsNone_binary_11balancing_12vs56/checkpoints/epoch=29-step=990.ckpt"
+# # ----- 
+# ckpt = "147_EMBED_DDPM_augmentationsNone_binary_31fixedmatching_12vs56/checkpoints/epoch=26-step=1566.ckpt" # simple, no augs no balancing
 # ablation test
 # ckpt = "148_EMBED_DDPM_augmentationsNone_ablation_MSEonly/checkpoints/epoch=15-step=928.ckpt"
-ckpt = "149_EMBED_DDPM_augmentationsNone_ablation_MSEandMS_SSIM/checkpoints/epoch=26-step=1566.ckpt"
+# ckpt = "149_EMBED_DDPM_augmentationsNone_ablation_MSEandMS_SSIM/checkpoints/epoch=26-step=1566.ckpt"
+# ckpt = "152_EMBED_DDPM_augmentationsNone_composite_loss_weights_70_30_0_ablation/checkpoints/epoch=15-step=1840.ckpt"
+# ckpt = "153_EMBED_DDPM_augmentationsNone_composite_loss_weights_80_10_10_ablation/checkpoints/epoch=15-step=1840.ckpt"
+# ckpt = "154_EMBED_DDPM_augmentationsNone_composite_loss_weights_85_5_10_ablation/checkpoints/epoch=16-step=1955.ckpt"
+# ckpt = "155_EMBED_DDPM_augmentationsNone_composite_loss_weights_60_40_ablation/checkpoints/epoch=08-step=1035.ckpt"
+# ckpt = "156_EMBED_DDPM_augmentationsNone_composite_loss_weights_70_20_10_ablation/checkpoints/epoch=15-step=1840.ckpt"
 CKPT_PATH = root / ckpt
 
 # CKPT_PATH = "/home/locolinux2/U24_synthesis/lightning_synthesis/experiments/094_DDPM_MS-SSIM_10perc_HF_5perc_val/checkpoints/epoch=12-step=1690.ckpt" # ACTUAL GOLD
@@ -67,12 +72,12 @@ NAME_TAG = f"{ckpt[:4]}"
 RESOLUTION = 256
 BATCH      = 16
 N_EVAL     = 200                       # samples / class
-SCALES     = [0,4]#,5,6,7,8] #,9,10, 0,4]#[0, 4, 7, 8]
+SCALES     = [0,1,2,3,4] #,5,6,7,8] #[0] #[3,2,1] #[4,5,6,7,8] #,9,10, 0,4]#[0, 4, 7, 8]
 EVAL_SET = 'test'
 # ORACLE_DIR  = "072_resnet50_CMMD_binary_12vs56_seed44_real_perc1.0" # "062_resnet50_binary_12vs56_seed44_real_perc1.0"
-ORACLE_DIR  = "073_resnet50_CMMD_balanced_binary_12vs56_seed44_real_perc1.0"
-ORACLE_DIR  = "074_CMMD_binary_256x256_resnet50_EMBED_binary_12vs56_dynamic11_seed44_real_perc1.0"
-ORACLE_DIR  = "075_CMMD_binary_256x256_resnet50_EMBED_binary_12vs56_dynamic21_seed44_real_perc1.0"
+# ORACLE_DIR  = "073_resnet50_CMMD_balanced_binary_12vs56_seed44_real_perc1.0"
+# ORACLE_DIR  = "074_CMMD_binary_256x256_resnet50_EMBED_binary_12vs56_dynamic11_seed44_real_perc1.0"
+# ORACLE_DIR  = "075_CMMD_binary_256x256_resnet50_EMBED_binary_12vs56_dynamic21_seed44_real_perc1.0"
 ORACLE_DIR  = "088_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real_perc1.0" # GOLDEN EMBED, on test: Oracle ACC : {'benign': '0.875', 'malignant': '0.825', 'mean': '0.850'}
 DATASET = 'EMBED' # CMMD or EMBED
 MODEL_NAME = 'convnext_tiny'
@@ -224,42 +229,59 @@ def metrics_for_scale(model, scale):
     fid_cls, acc_cls = {}, {}
     fid_global = FID(feature=64, normalize=True).to(device)
     synth_bank = {c: [] for c in categories}
+    real_bank  = {c: [] for c in categories}
 
-    for c, label_id in zip(categories, range(len(categories))):
-        # ── prepare “real” side ─────────────────────────────────────────
+    # ----- per-class real stats & global real -----
+    for c in categories:
         fid = FID(feature=64, normalize=True).to(device)
         for imgs, _ in val_loaders[c]:
-            fid.update(to_rgb(imgs.to(device)), real=True)
-            fid_global.update(to_rgb(imgs.to(device)), real=True)
+            imgs = to_rgb(imgs.to(device))
+            fid.update(imgs, real=True)
+            fid_global.update(imgs, real=True)
+            real_bank[c].append(imgs.detach().cpu())   # cache for CS-FID(real)
 
-        # ── synthetic side (cache-aware) ────────────────────────────────
-        synth = load_or_generate(model, label_id, c, scale, N_EVAL)      # (N_EVAL,1,H,W)
-        synth_bank[c].append(synth)                               # later BCFID
+        # ----- synthetic side (cache-aware) -----
+        label_id = categories.index(c)
+        synth = load_or_generate(model, label_id, c, scale, N_EVAL)  # (N_EVAL,1,H,W)
+        synth_bank[c].append(synth)  # keep CPU for pairwise FIDs
 
         fid.update(to_rgb(synth.to(device)), real=False)
         fid_global.update(to_rgb(synth.to(device)), real=False)
 
-        # oracle accuracy ------------------------------------------------
-        inp = oracle_norm(synth.to(device)).half()   # keep/restore FP16
-        logits = oracle(inp)                         # (N_EVAL, C)
-        preds   = logits.argmax(dim=1)
-        correct = (preds == label_id).sum().item()
+        # ----- oracle accuracy on synthetic -----
+        inp = oracle_norm(synth.to(device)).half()
+        logits = oracle(inp)
+        preds = logits.argmax(dim=1)
+        acc_cls[c] = (preds == label_id).sum().item() / N_EVAL
 
+        # per-class real-vs-synth FID
         fid_cls[c] = fid.compute().item()
-        acc_cls[c] = correct / N_EVAL
 
-    # ── BCFID (between-class FID) ───────────────────────────────────────
-    bcfids = []
+    # ----- CS-FID (synth): FID( G_benign , G_malignant ) -----
+    # (works for >2 classes too: average across all unordered pairs)
+    csfid_synth_vals = []
     for c1, c2 in combinations(categories, 2):
         fid_pair = FID(feature=64, normalize=True).to(device)
+        # treat c1 images as "real", c2 as "generated" (order immaterial for reporting)
         for t in synth_bank[c1]:
             fid_pair.update(to_rgb(t.to(device)), real=True)
         for t in synth_bank[c2]:
             fid_pair.update(to_rgb(t.to(device)), real=False)
-        bcfids.append(fid_pair.compute().item())
-    fid_cls["bcfid"] = sum(bcfids) / len(bcfids)
+        csfid_synth_vals.append(fid_pair.compute().item())
+    fid_cls["csfid_synth"] = float(np.mean(csfid_synth_vals))
 
-    # summaries ---------------------------------------------------------
+    # ----- CS-FID (real): FID( R_benign , R_malignant ) -----
+    csfid_real_vals = []
+    for c1, c2 in combinations(categories, 2):
+        fid_pair = FID(feature=64, normalize=True).to(device)
+        for batch in real_bank[c1]:
+            fid_pair.update(batch.to(device), real=True)
+        for batch in real_bank[c2]:
+            fid_pair.update(batch.to(device), real=False)
+        csfid_real_vals.append(fid_pair.compute().item())
+    fid_cls["csfid_real"] = float(np.mean(csfid_real_vals))
+
+    # summaries
     fid_cls["global"] = fid_global.compute().item()
     fid_cls["mean"]   = sum(fid_cls[k] for k in categories) / len(categories)
     acc_cls["mean"]   = sum(acc_cls.values()) / len(categories)
@@ -272,8 +294,11 @@ for gs in SCALES:
     print(f"\n>>> guidance scale {gs}")
     fid_c, acc_c = metrics_for_scale(model, gs)
     results_fid[gs], results_acc[gs] = fid_c, acc_c
-    print("FID :", {k:f"{v:.2f}" for k,v in fid_c.items()})
-    print("Oracle ACC :", {k:f"{v:.3f}" for k,v in acc_c.items()})
+    # show new CS-FID metrics too
+    show = {k: f"{v:.2f}" for k, v in fid_c.items() if k in ["global", "csfid_real", "csfid_synth", *categories, "mean"]}
+    print("FID / CS-FID :", show)
+    print("Oracle ACC   :", {k: f"{v:.3f}" for k, v in acc_c.items()})
+
 
 # ── LOGGING ───────────────────────────────────────────────────────────────
 ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -281,19 +306,21 @@ os.makedirs("logs", exist_ok=True)
 csv_path = f"logs/{NAME_TAG}{EVAL_SET}_metrics_{ts}.csv"
 
 header = (["Guidance",
-           "FID_global", "FID_bcfid",
+           "FID_global", "CSFID_real", "CSFID_synth",
            *[f"FID_{c}" for c in categories + ['mean']],
            *[f"ACC_{c}" for c in categories + ['mean']]])
 
-with open(csv_path, "w", newline="") as f:        # ← open file
+with open(csv_path, "w", newline="") as f:
     writer = csv.writer(f)
     writer.writerow(header)
 
     for gs in SCALES:
         fid_row = [results_fid[gs]["global"],
-                   results_fid[gs]["bcfid"],
+                   results_fid[gs]["csfid_real"],
+                   results_fid[gs]["csfid_synth"],
                    *[results_fid[gs][c] for c in categories + ['mean']]]
         acc_row = [results_acc[gs][c] for c in categories + ['mean']]
         writer.writerow([gs, *fid_row, *acc_row])
+
 
 print(f"\nSaved results to {csv_path}")

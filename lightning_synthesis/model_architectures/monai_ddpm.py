@@ -28,7 +28,7 @@ class HighFreqLoss(torch.nn.Module):
 
 
 class MonaiDDPM(pl.LightningModule):
-    def __init__(self, lr, T=1000, log_every=500, w_mse=0.85, w_ssim=0.1):
+    def __init__(self, lr, T=1000, log_every=500, w_mse=0.70, w_ssim=0.20):
         super().__init__()
         # --- noise‑predictor -------------------------------------------------
         self.unet = DiffusionModelUNet(
