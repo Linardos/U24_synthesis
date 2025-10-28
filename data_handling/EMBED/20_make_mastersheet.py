@@ -22,7 +22,9 @@ clinical_cols = [
     "acc_anon",
     "asses",        # BI-RADS (letters A/N/B/P/S/M/K)
     "implanfind",   # implant findings flag
-    "tissueden"
+    "tissueden",
+    "side", #laterality of finding described in current row (R,L,B)
+    "bside" #laterality of biopsied finding (R,L)
 ]
 metadata_cols = [
     "empi_anon",

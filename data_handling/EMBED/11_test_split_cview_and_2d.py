@@ -5,7 +5,7 @@ import shutil
 
 # USER: edit these two paths before running
 CSV_PATH = Path("/mnt/d/Datasets/EMBED/tables/EMBED_OpenData_metadata_reduced.csv")
-TEST_ROOT = Path("/mnt/d/Datasets/EMBED/EMBED_binary_256x256/test")
+TEST_ROOT = Path("/mnt/d/Datasets/EMBED/EMBED_binary_clean/test")
 
 def load_uid_map(csv_path: Path):
     df = pd.read_csv(csv_path, low_memory=False)

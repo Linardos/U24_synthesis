@@ -21,6 +21,7 @@ RNG_SEED   = 42
 # 0.  Load metadata  ▸ map BI-RADS codes → coarse categories
 # ------------------------------------------------------------
 csv_path = "/mnt/d/Datasets/EMBED/tables/EMBED_cleaned_metadata.csv"
+output_folder_name = "EMBED_binary_clean"
 data = pd.read_csv(csv_path)
 
 birads_map = {
@@ -39,6 +40,55 @@ data = data[data["category"] != "unknown"].copy()
 
 # 🔹 ignore magnification views
 data = data[data["spot_mag"] != 1].copy()
+
+# ------------------------------------------------------------
+# 0.b  Laterality filter (MALIGNANT ONLY)
+#      - For malignant: keep if side == ImageLateralityFinal, or side == 'B' (both)
+#      - For benign:    keep everything (no laterality constraint)
+# ------------------------------------------------------------
+def _norm_side(s):
+    if pd.isna(s):
+        return np.nan
+    s = str(s).strip().upper()
+    if s in {"RIGHT", "RT"}: return "R"
+    if s in {"LEFT", "LT"}:  return "L"
+    if s in {"BOTH", "B"}:   return "B"
+    if s in {"R", "L"}:      return s
+    return np.nan  # treat anything else as unknown
+
+required_cols = {"side", "ImageLateralityFinal"}
+missing = required_cols - set(data.columns)
+if missing:
+    raise KeyError(f"Missing columns in CSV: {missing}")
+
+data["side_norm"]    = data["side"].map(_norm_side)
+data["img_lat_norm"] = data["ImageLateralityFinal"].map(_norm_side)
+
+is_malig = data["category"] == "malignant"
+
+# malignant rows must have valid laterality and match, unless side == 'B'
+mask_malig_valid = (
+    is_malig &
+    data["img_lat_norm"].isin(["L", "R"]) &
+    data["side_norm"].isin(["L", "R", "B"]) &
+    ((data["side_norm"] == data["img_lat_norm"]) | (data["side_norm"] == "B"))
+)
+
+# benign rows pass through
+mask_benign = ~is_malig
+
+mask_keep = mask_benign | mask_malig_valid
+
+dropped = (~mask_keep).sum()
+if dropped:
+    print(f"Dropping {dropped} rows (malignant laterality mismatch/unknown):")
+    print(
+        data.loc[~mask_keep, ["empi_anon","category","asses","side","ImageLateralityFinal","anon_dicom_path"]]
+            .head(10).to_string(index=False)
+    )
+
+data = data.loc[mask_keep].drop(columns=["side_norm","img_lat_norm"]).reset_index(drop=True)
+
 
 # ------------------------------------------------------------
 # 1.  Cap dataset size per category – keep all malignant
@@ -131,7 +181,7 @@ _show_split("TEST",  test)
 # 3.  Folder layout
 # ------------------------------------------------------------
 base_dir   = "/mnt/d/Datasets/EMBED/images/"
-output_dir = f"/mnt/d/Datasets/EMBED/EMBED_binary_12vs56_{RESIZE_DIM}x{RESIZE_DIM}"
+output_dir = f"/mnt/d/Datasets/EMBED/{output_folder_name}"
 categories = ["benign", "malignant"]
 
 for split in ["train", "val", "test"]:

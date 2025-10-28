@@ -5,8 +5,8 @@ import shutil
 
 # USER: edit these two paths before running
 CSV_PATH = Path("/mnt/d/Datasets/EMBED/tables/EMBED_OpenData_metadata_reduced.csv")
-train_ROOT = Path("/mnt/d/Datasets/EMBED/EMBED_binary_clean/train/original")
-train_ROOT = Path("/mnt/d/Datasets/EMBED/EMBED_binary_clean/train/original")
+train_ROOT = Path("/mnt/d/Datasets/EMBED/EMBED_binary_clean/val")
+train_ROOT = Path("/mnt/d/Datasets/EMBED/EMBED_binary_clean/val")
 
 def load_uid_map(csv_path: Path):
     df = pd.read_csv(csv_path, low_memory=False)
@@ -61,7 +61,7 @@ def main():
         if nii.is_file():
             shutil.copy2(nii, dest_dir / nii.name)
 
-    print("\n=== FinalImageType counts (train SET) ===")
+    print("\n=== FinalImageType counts (VAL SET) ===")
     print(f"malignant cview : {counts[('malignant','cview')]}")
     print(f"benign    cview : {counts[('benign','cview')]}")
     print(f"malignant 2D    : {counts[('malignant','2d')]}")

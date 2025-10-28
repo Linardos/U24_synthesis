@@ -6,8 +6,8 @@ import pandas as pd
 # ─────────────────────────────────────────────────────────────
 clinical_csv_path = "/mnt/d/Datasets/EMBED/tables/EMBED_OpenData_clinical.csv"
 metadata_csv_path = "/mnt/d/Datasets/EMBED/tables/EMBED_OpenData_metadata.csv"
-# output_csv_path   = "/mnt/d/Datasets/EMBED/tables/EMBED_cleaned_metadata.csv"
-output_csv_path   = "/mnt/d/Datasets/EMBED/tables/EMBED_cleaned_Project_2.csv"
+output_csv_path   = "/mnt/d/Datasets/EMBED/tables/EMBED_cleaned_metadata.csv"
+# output_csv_path   = "/mnt/d/Datasets/EMBED/tables/EMBED_cleaned_Project_2.csv"
 
 # ─────────────────────────────────────────────────────────────
 # 1.  Load CSVs
@@ -24,7 +24,9 @@ clinical_cols = [
     "asses",        # BI-RADS
     "implanfind",   # implant findings flag
     "tissueden",
-    "path_severity"
+    "path_severity",
+    "side", #laterality of finding described in current row (R,L,B)
+    "bside" #laterality of biopsied finding (R,L)
 ]
 metadata_cols = [
     "empi_anon",

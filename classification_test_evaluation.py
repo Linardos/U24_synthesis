@@ -6,29 +6,6 @@
 Usage
 -----
 $ python evaluate_oracle_metrics.py
-
-What it does
-------------
-- Loads the Oracle classifier checkpoint you point to below.
-- Evaluates on three splits under the same dataset root:
-    1) test         (full test set)
-    2) test_cview   (C-View subset)
-    3) test_2d      (2D subset)
-- Reports per-split: Balanced Accuracy, Sensitivity (TPR for malignant),
-  Specificity (TNR for benign), and ROC-AUC (one-vs-rest binary).
-- Logs results to logs/oracle_metrics_<timestamp>.csv
-
-Assumptions
------------
-- Binary classification with categories: ["benign", "malignant"] (0/1).
-- Directory layout like:
-    /mnt/d/Datasets/EMBED/EMBED_binary_256x256/{test,test_cview,test_2d}/{benign,malignant}/...
-- Uses your NiftiSynthesisDataset and get_model utilities.
-
-Notes
------
-- If a split contains only one label (rare), ROC-AUC is undefined; we record NaN.
-- Uses fp16 + autocast on CUDA if available.
 """
 
 import os, csv, yaml, json, math, random
@@ -38,9 +15,8 @@ from typing import Dict, Tuple, List
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader, Dataset   # ← (B) use Dataset here
 from torchvision.transforms import Normalize
-from monai import transforms as mt
 from sklearn.metrics import confusion_matrix, balanced_accuracy_score, roc_auc_score
 
 # ── project-level imports (make repo root importable first) ────────────────
@@ -48,19 +24,24 @@ ROOT_DIR = Path(__file__).resolve().parents[1]  # one level up from this file
 if str(ROOT_DIR) not in os.sys.path:
     os.sys.path.insert(0, str(ROOT_DIR))
 
-from data_loaders_l import NiftiSynthesisDataset  # noqa: E402
-from models import get_model                      # noqa: E402
+from data_loaders import NiftiDataset  # noqa: E402
+from models import get_model           # noqa: E402
 
 # ── CONFIGURATION ──────────────────────────────────────────────────────────
 SEED         = 42
 RESOLUTION   = 256
 BATCH        = 32          # larger batch for faster eval; adjust as needed
 NUM_WORKERS  = 4
-CONFIG_YAML  = "config_l.yaml"
+CONFIG_YAML  = "config.yaml"
 
 # Choose your model experiment directory and checkpoint (mirrors your pattern)
 MODEL_DIR = "088_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real_perc1.0" # Oracle is the baseline
-# MODEL_DIR = "132_EMBED_binary_256x256_holdout_convnext_tiny_syngscale3_seed44_Augsbasic_real1.0_syn0.0_fTune_130_real1.0_syn0.75"
+MODEL_DIR = "132_EMBED_binary_256x256_holdout_convnext_tiny_syngscale3_seed44_Augsbasic_real1.0_syn0.0_fTune_130_real1.0_syn0.75" # GSCALE 3
+MODEL_DIR = "119_EMBED_binary_256x256_holdout_convnext_tiny_FTune_Freeze5_seed44_Augsgeometric_real1.0_syn0.0_fTune_097_real1.0_syn0.75" # GSCALE 5
+MODEL_DIR = "097_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn0.75"
+MODEL_DIR = "111_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_101_real1.0_syn0.75"
+MODEL_DIR = "121_EMBED_binary_256x256_holdout_convnext_tiny_FTune_Freeze5_seed44_Augsgeometric_real1.0_syn0.0_fTune_096_real1.0_syn0.25"
+MODEL_DIR = "109_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_099_real1.0_syn0.25"
 MODEL_CKPT = (
     "/home/locolinux2/U24_synthesis/experiments/"
     f"{MODEL_DIR}/last.pt"
@@ -85,19 +66,28 @@ torch.manual_seed(SEED)
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 # ── HELPERS ────────────────────────────────────────────────────────────────
+# (A) tensor→tensor transform (no MONAI dict ops)
 def build_transforms():
-    # Same normalization pipeline you’ve been using so Oracle sees familiar ranges
-    return mt.Compose([
-        mt.LoadImaged(keys=["image"], image_only=True),
-        mt.SqueezeDimd(keys=["image"], dim=-1),
-        mt.EnsureChannelFirstd(keys=["image"]),
-        mt.Lambdad(keys=["image"], func=lambda img: (img - img.mean()) / (img.std() + 1e-8)),
-        mt.ScaleIntensityd(keys=["image"], minv=0.0, maxv=1.0),
-        mt.ToTensord(keys=["image"]),
-    ])
+    """Expects a torch.Tensor shaped [1,H,W] or [1,H,W,D] from NiftiDataset.
+    Applies per-image z-score, then min-max to [0,1]."""
+    def _tf(x: torch.Tensor) -> torch.Tensor:
+        # If 3D with trailing depth, collapse to 2D by mean over depth
+        if x.ndim == 4:
+            if x.shape[-1] == 1:
+                x = x.squeeze(-1)      # [1,H,W]
+            else:
+                x = x.mean(dim=-1)     # [1,H,W]
+        x = x.to(torch.float32)
+        # z-score
+        m, s = x.mean(), x.std()
+        x = (x - m) / (s + 1e-8)
+        # min-max → [0,1]
+        xmin, xmax = x.min(), x.max()
+        x = (x - xmin) / (xmax - xmin + 1e-8)
+        return x
+    return _tf
 
 def load_oracle(num_classes: int):
-    # Mirror your convnext_tiny choice; change here if you need resnet50, etc.
     model = get_model("convnext_tiny", num_classes=num_classes, pretrained=False)
     ckpt = torch.load(MODEL_CKPT, map_location="cpu", weights_only=False)
     # Support either "model_state" or "model_state_dict"
@@ -108,8 +98,9 @@ def load_oracle(num_classes: int):
     model = model.half().to(DEVICE).eval()
     return model
 
+# (B) type hint uses Dataset; safe autocast only on CUDA
 def collect_logits_labels(
-    ds: NiftiSynthesisDataset,
+    ds: Dataset,
     batch_size: int,
     num_workers: int
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -121,12 +112,22 @@ def collect_logits_labels(
     norm = Normalize(mean=[0.5], std=[0.5])  # [0,1] -> [-1,1]
     logits_list: List[torch.Tensor] = []
     labels_list: List[torch.Tensor] = []
-    with torch.no_grad(), torch.autocast(DEVICE.split(":")[0], dtype=torch.float16):
-        for imgs, labels in dl:
-            imgs = imgs.to(DEVICE, non_blocking=True)
-            logits = oracle(norm(imgs))
-            logits_list.append(logits.float().cpu())
-            labels_list.append(labels.long().cpu())
+
+    use_cuda_amp = DEVICE.startswith("cuda")
+    if use_cuda_amp:
+        ctx = torch.autocast("cuda", dtype=torch.float16)
+        ctx.__enter__()
+    try:
+        with torch.no_grad():
+            for imgs, labels in dl:
+                imgs = imgs.to(DEVICE, non_blocking=True)
+                logits = oracle(norm(imgs))
+                logits_list.append(logits.float().cpu())
+                labels_list.append(labels.long().cpu())
+    finally:
+        if use_cuda_amp:
+            ctx.__exit__(None, None, None)
+
     return torch.cat(logits_list, dim=0), torch.cat(labels_list, dim=0)
 
 def metrics_binary(logits: torch.Tensor, labels: torch.Tensor) -> Dict[str, float]:
@@ -135,7 +136,6 @@ def metrics_binary(logits: torch.Tensor, labels: torch.Tensor) -> Dict[str, floa
     Specificity (TNR for benign=0), and ROC-AUC (prob of class 1).
     """
     if logits.ndim == 1 or logits.shape[1] == 1:
-        # Safety: treat values as logits for class-1; construct 2-class probs
         probs1 = torch.sigmoid(logits.squeeze(1)).numpy()
     else:
         probs = torch.softmax(logits, dim=1).numpy()
@@ -144,20 +144,16 @@ def metrics_binary(logits: torch.Tensor, labels: torch.Tensor) -> Dict[str, floa
     y_true = labels.numpy()
     y_pred = (probs1 >= 0.5).astype(np.int64)
 
-    # Confusion matrix with fixed label order [0,1]
     cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
     tn, fp, fn, tp = cm.ravel() if cm.size == 4 else (0, 0, 0, 0)
 
-    # Core metrics
     sensitivity = tp / (tp + fn) if (tp + fn) > 0 else float("nan")
     specificity = tn / (tn + fp) if (tn + fp) > 0 else float("nan")
     bal_acc = balanced_accuracy_score(y_true, y_pred)
 
-    # ROC-AUC
     try:
         auc = roc_auc_score(y_true, probs1)
     except ValueError:
-        # Happens if only one class present in y_true
         auc = float("nan")
 
     return {
@@ -206,7 +202,7 @@ if __name__ == "__main__":
                 print(f"[WARN] Split path missing: {split_path}. Skipping.")
                 continue
 
-            ds = NiftiSynthesisDataset(str(split_path), transform=tfm)
+            ds = NiftiDataset(str(split_path), transform=tfm)
             if len(ds) == 0:
                 print(f"[WARN] Split {split_name} is empty. Skipping.")
                 continue
