@@ -45,7 +45,7 @@ def adapt_first_conv_to_grayscale(cnn: nn.Module) -> nn.Module:
 
 # ── wrapper that replaces the classification head ───────────────────
 class Classifier(nn.Module):
-    def __init__(self, backbone: nn.Module, num_classes: int, p_drop: float = 0.6):
+    def __init__(self, backbone: nn.Module, num_classes: int, p_drop: float = 0.2):
         super().__init__()
         self.backbone = backbone
 
