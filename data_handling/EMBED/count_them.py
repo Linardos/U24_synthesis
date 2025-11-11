@@ -41,3 +41,27 @@ print("\nTotal (benign + malignant):", len(filtered))
 # print("\nBy laterality (if column exists):")
 # if "laterality" in filtered.columns:
 #     print(filtered.groupby(["category", "laterality"]).size())
+
+# Then count the selected
+#!/usr/bin/env python3
+from pathlib import Path
+import pandas as pd
+
+# set to your builder’s output
+output_dir = Path("/mnt/d/Datasets/EMBED/EMBED_binary_clean")
+
+splits = ["train/original", "val", "test"]
+cats   = ["benign", "malignant"]
+
+rows = []
+for s in splits:
+    for c in cats:
+        root = output_dir / s / c
+        n = sum(1 for p in (output_dir / s / c).glob("*/") if p.is_dir())
+        rows.append({"split": s, "category": c, "count": n})
+
+df = pd.DataFrame(rows)
+table = df.pivot(index="split", columns="category", values="count").fillna(0).astype(int)
+print(table.to_string())
+print("\nTotals per split:")
+print(df.groupby("split")["count"].sum().astype(int).to_string())

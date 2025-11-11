@@ -4,7 +4,7 @@ import pandas as pd
 # ─────────────────────────────────────────────────────────────
 # 0.  Paths
 # ─────────────────────────────────────────────────────────────
-clinical_csv_path = "/mnt/d/Datasets/EMBED/tables/EMBED_OpenData_clinical.csv"
+clinical_csv_path = "/mnt/d/Datasets/EMBED/tables/EMBED_OpenData_clinical_reduced.csv"
 metadata_csv_path = "/mnt/d/Datasets/EMBED/tables/EMBED_OpenData_metadata.csv"
 output_csv_path   = "/mnt/d/Datasets/EMBED/tables/EMBED_mastersheet.csv"
 
@@ -21,10 +21,12 @@ clinical_cols = [
     "empi_anon",
     "acc_anon",
     "asses",        # BI-RADS (letters A/N/B/P/S/M/K)
-    "implanfind",   # implant findings flag
     "tissueden",
     "side", #laterality of finding described in current row (R,L,B)
-    "bside" #laterality of biopsied finding (R,L)
+    "RACE_DESC",
+    "age_at_study",
+    "study_date_anon",
+    "desc"
 ]
 metadata_cols = [
     "empi_anon",
@@ -64,12 +66,23 @@ cleaned_df = pd.merge(
 # 5.  Column renames
 #     - empi_anon -> MRN
 #     - acc_anon  -> ACC_ID
+#     - tissueden -> BIRADS DENSITY
+#     - side -> LATERALITY_RELEVANT_TO_FINDING
+#     - RACE_DESC -> RACE
+#     - age_at_study -> AGE
+#     - study_date -> STUDY_DATE
 # ─────────────────────────────────────────────────────────────
 cleaned_df = cleaned_df.rename(columns={
     "empi_anon": "MRN",
     "acc_anon": "ACC_ID",
-    "tissueden": "BIRADS DENSITY"
+    "tissueden": "BIRADS DENSITY",
+    "side": "LATERALITY_RELEVANT_TO_FINDING",
+    "RACE_DESC": "RACE",
+    "age_at_study": "AGE",
+    "study_date_anon": "STUDY_DATE",
+    "desc": "STUDY_DESC"
 })
+
 
 # ─────────────────────────────────────────────────────────────
 # 6.  Map BI-RADS letters -> numbers in `asses`
@@ -100,8 +113,15 @@ cleaned_df["FinalImageType"] = fit.where(
     other="conventional 2D mammogram"
 )
 
+
 # ─────────────────────────────────────────────────────────────
-# 8.  Save
+# 8.  Add constant columns
+# ─────────────────────────────────────────────────────────────
+cleaned_df["ORGAN"] = "BRST"
+cleaned_df["SOURCE"] = "EMBED"
+
+# ─────────────────────────────────────────────────────────────
+# 9.  Save
 # ─────────────────────────────────────────────────────────────
 cleaned_df.to_csv(output_csv_path, index=False)
 print(f"Cleaned data saved to {output_csv_path}")
