@@ -4,7 +4,7 @@ import pandas as pd
 # ─────────────────────────────────────────────────────────────
 # 0.  Paths
 # ─────────────────────────────────────────────────────────────
-clinical_csv_path = "/mnt/d/Datasets/EMBED/tables/EMBED_OpenData_clinical_reduced.csv"
+clinical_csv_path = "/mnt/d/Datasets/EMBED/tables/EMBED_OpenData_clinical.csv"
 metadata_csv_path = "/mnt/d/Datasets/EMBED/tables/EMBED_OpenData_metadata.csv"
 output_csv_path   = "/mnt/d/Datasets/EMBED/tables/EMBED_mastersheet.csv"
 
@@ -23,10 +23,11 @@ clinical_cols = [
     "asses",        # BI-RADS (letters A/N/B/P/S/M/K)
     "tissueden",
     "side", #laterality of finding described in current row (R,L,B)
-    "RACE_DESC",
+    "ETHNICITY_DESC",
     "age_at_study",
     "study_date_anon",
-    "desc"
+    "desc",
+    "loc_num"
 ]
 metadata_cols = [
     "empi_anon",
@@ -68,7 +69,7 @@ cleaned_df = pd.merge(
 #     - acc_anon  -> ACC_ID
 #     - tissueden -> BIRADS DENSITY
 #     - side -> LATERALITY_RELEVANT_TO_FINDING
-#     - RACE_DESC -> RACE
+#     - ETHNICITY_DESC -> RACE
 #     - age_at_study -> AGE
 #     - study_date -> STUDY_DATE
 # ─────────────────────────────────────────────────────────────
@@ -77,10 +78,11 @@ cleaned_df = cleaned_df.rename(columns={
     "acc_anon": "ACC_ID",
     "tissueden": "BIRADS DENSITY",
     "side": "LATERALITY_RELEVANT_TO_FINDING",
-    "RACE_DESC": "RACE",
+    "ETHNICITY_DESC": "RACE",
     "age_at_study": "AGE",
     "study_date_anon": "STUDY_DATE",
-    "desc": "STUDY_DESC"
+    "desc": "STUDY_DESC",
+    "loc_num": "INSTITUTION_LOCATION_CODE",
 })
 
 
