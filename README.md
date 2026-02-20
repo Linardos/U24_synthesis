@@ -1,5 +1,4 @@
 # Conditional Mammography Synthesis & Classification  
-## (EMBED + Class-Conditional DDPM)
 
 This repository reproduces the experiments from:
 
