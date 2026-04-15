@@ -1,109 +1,121 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # collect_metrics.py -------------------------------------------------------
 """
-Summarise oracle-training metrics across experiments.
+Summarise validation metrics across experiments.
 
-For each experiment folder given on the CLI:
-  • read logs.csv
-  • find max validation AUC (AUC_max)
-  • find the LAST epoch whose AUC ≥ AUC_max − 0.001
+Selection rule (matches EarlyStopping on val loss):
+  • filter phase == "val"
+  • pick epoch with MIN validation 'loss'
   • report that epoch’s metrics
+
+Outputs:
+  • prints a markdown table (copy-paste ready)
+  • writes oracle_summary.csv in the current working directory
 """
 
-import csv, pathlib
+from __future__ import annotations
+
+import pathlib
 import pandas as pd
 
-TOL = 1e-3          # 0.001 AUC tolerance
+# --------------------------- CONFIG (EDIT ME) -----------------------------
+
+EXPERIMENTS = [
+    # "./experiments/090_EMBED_binary_clean_holdout_convnext_tiny_Oracle_seed44_Augsgeometric_real1.0_syn0.0",
+    # "./experiments/091_EMBED_binary_256x256_holdout_convnext_tiny_Oracle_seed44_Augsgeometric_real1.0_syn0.0",
+    # "./experiments/141_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed44_Augsgeometric_real0.75_syn0.25",
+    # "./experiments/142_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed44_Augsgeometric_real0.5_syn0.5",
+    # "./experiments/143_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed44_Augsgeometric_real0.25_syn0.75",
+    # "./experiments/144_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed44_Augsgeometric_real0.0_syn1.0",
+    # "./experiments/144_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed44_Augsgeometric_real1.0_syn0.0",
+    # new January 7 runs
+    "./experiments/145_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed44_Augsgeometric_real0.75_syn0.25",
+    "./experiments/146_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed44_Augsgeometric_real0.5_syn0.5",
+    "./experiments/147_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed44_Augsgeometric_real0.25_syn0.75",
+    "./experiments/148_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed44_Augsgeometric_real0.0_syn1.0",
+]
 
 
-def pick_epoch(log_path: pathlib.Path):
-    with log_path.open() as f:
-        rows = [r for r in csv.DictReader(f) if r["phase"] == "val"]
+OUT_CSV = "oracle_summary.csv"
 
-    # float‑ify once
-    for r in rows:
-        r["AUC"]           = float(r["AUC"])
-        r["overall_acc"]   = float(r["overall_acc"])
-        r["balanced_acc"]  = float(r["balanced_acc"])          # ❶ NEW
-        r["ACC_class0"]    = float(r["ACC_class0"])
-        r["ACC_class1"]    = float(r["ACC_class1"])
-        r["epoch"]         = int(r["epoch"])
+# -------------------------------------------------------------------------
 
-    auc_max = max(r["AUC"] for r in rows)
-    best = max((r for r in rows if r["AUC"] >= auc_max - TOL),
-               key=lambda r: r["epoch"])
+
+def _require_cols(df: pd.DataFrame, cols: list[str], log_path: pathlib.Path) -> None:
+    missing = [c for c in cols if c not in df.columns]
+    if missing:
+        raise KeyError(f"{log_path}: missing columns: {missing}. Available: {list(df.columns)}")
+
+
+def pick_best_val_row_by_loss(log_path: pathlib.Path) -> pd.Series:
+    df = pd.read_csv(log_path)
+
+    # required for early-stopping-on-loss semantics
+    _require_cols(df, ["epoch", "phase", "loss"], log_path)
+
+    df = df[df["phase"] == "val"].copy()
+    if df.empty:
+        raise ValueError(f"{log_path}: no val rows")
+
+    # ensure numeric
+    df["epoch"] = pd.to_numeric(df["epoch"], errors="raise").astype(int)
+    df["loss"] = pd.to_numeric(df["loss"], errors="raise")
+
+    # EarlyStopping behavior: pick the MIN val loss epoch
+    # If ties, take the earliest epoch (stable / conservative)
+    min_loss = df["loss"].min()
+    tied = df[df["loss"] == min_loss].sort_values("epoch")
+    chosen = tied.iloc[0]
+
+    return chosen
+
+
+def summarise_experiment(exp_dir: str) -> dict:
+    log_path = pathlib.Path(exp_dir) / "logs.csv"
+    if not log_path.exists():
+        raise FileNotFoundError(str(log_path))
+
+    best = pick_best_val_row_by_loss(log_path)
+
+    # Pull whichever metrics exist (won't crash if some are missing)
+    def get_num(col: str):
+        return float(best[col]) if col in best.index and pd.notna(best[col]) else float("nan")
 
     return {
-        "experiment":   log_path.parent.name,
-        "epoch":        best["epoch"],
-        "AUC":          round(best["AUC"],          4),
-        "Accuracy":     round(best["overall_acc"],  4),
-        "BalancedAcc":  round(best["balanced_acc"], 4),        # ❷ NEW
-        "Sensitivity":  round(best["ACC_class1"],   4),
-        "Specificity":  round(best["ACC_class0"],   4),
+        "experiment": log_path.parent.name,
+        "epoch": int(best["epoch"]),
+        "val_loss": round(get_num("loss"), 6),
+        "AUC": round(get_num("AUC"), 4),
+        "Accuracy": round(get_num("overall_acc"), 4),
+        "BalancedAcc": round(get_num("balanced_acc"), 4),
+        "Specificity": round(get_num("ACC_class0"), 4),
+        "Sensitivity": round(get_num("ACC_class1"), 4),
     }
 
-def main(exp_dirs):
+
+def main():
     recs = []
-    for d in exp_dirs:
-        log = pathlib.Path(d) / "logs.csv"
-        if not log.exists():
-            print(f"⚠️  {log} missing – skipped"); continue
-        recs.append(pick_epoch(log))
+    for d in EXPERIMENTS:
+        try:
+            recs.append(summarise_experiment(d))
+        except Exception as e:
+            print(f"⚠️  {d}: {e}")
 
     if not recs:
-        print("No valid experiments found."); return
+        print("No valid experiments found.")
+        return
 
-    df = (pd.DataFrame(recs)
-            .set_index("experiment")
-            .sort_values("AUC", ascending=False)
-            .round(4))                                         # ❸ NEW
+    df = pd.DataFrame(recs).set_index("experiment")
 
-    print("\n=== Oracle summary (Δ≤0.001 criterion) ===")
-    print(df.to_markdown())          # ready for copy‑paste
-    df.to_csv("oracle_summary.csv")
+    # Sort by val_loss ascending (best first)
+    df = df.sort_values("val_loss", ascending=True)
+
+    print("\n=== Summary (best epoch = min val loss) ===")
+    print(df.to_markdown())
+
+    df.to_csv(OUT_CSV)
+    print(f"\nWrote: {OUT_CSV}")
+
 
 if __name__ == "__main__":
-    
-    experiments_list = [
-
-        # "./experiments/083__EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test04lowerLR_seed44_real_perc1.0",
-        # "./experiments/087_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsbasic_real_perc1.0",
-        # "./experiments/088_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real_perc1.0",
-        # "./experiments/089_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsintensity_real_perc1.0",
-        #,        
-        # "./experiments/088_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real_perc1.0",
-        # "./experiments/094_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn1.0",
-        # "./experiments/095_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn0.5",
-        # "./experiments/096_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn0.25",
-        # "./experiments/097_EMBED_binary_256x256_holdout_convnext_tiny_model_regularizations_test06smoothingLoss_seed44_Augsgeometric_real1.0_syn0.75",
-        # #,        
-        # "./experiments/098_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.0",
-        # "./experiments/099_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.25",
-        # "./experiments/100_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.5",
-        # "./experiments/101_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.75",
-        # "./experiments/102_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn1.0",
-        # #,
-        # "./experiments/104_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_096_eal1.0_syn0.25",
-        # "./experiments/105_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_095_real1.0_syn0.5",
-        # "./experiments/106_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_097_eal1.0_syn0.75/",
-        # "./experiments/107_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_094_real1.0_syn1.0",
-        # "./experiments/108_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_098__real1.0_syn0.0",
-        # #,
-        # "./experiments/109_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_099_real1.0_syn0.25",
-        # "./experiments/110_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_100__real1.0_syn0.5",
-        # "./experiments/111_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_101_real1.0_syn0.75",
-        # "./experiments/112_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_102__real1.0_syn1.0",
-        # #,
-        # "./experiments/113_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.0_fTune_099_real1.0_syn0.25",
-        # "./experiments/114_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.0_fTune_100__real1.0_syn0.5",
-        # "./experiments/115_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.0_fTune_101_real1.0_syn0.75",
-        # "./experiments/116_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.0_fTune_102__real1.0_syn1.0"
-        # #,
-        "./experiments/117_EMBED_binary_256x256_holdout_convnext_tiny_FTune_Freeze5_seed44_Augsgeometric_real1.0_syn0.0_fTune_096_real1.0_syn0.25",
-        "./experiments/118_EMBED_binary_256x256_holdout_convnext_tiny_FTune_Freeze5_seed44_Augsgeometric_real1.0_syn0.0_fTune_095__real1.0_syn0.5",
-        "./experiments/119_EMBED_binary_256x256_holdout_convnext_tiny_FTune_Freeze5_seed44_Augsgeometric_real1.0_syn0.0_fTune_097_real1.0_syn0.75",
-        "./experiments/120_EMBED_binary_256x256_holdout_convnext_tiny_FTune_Freeze5_seed44_Augsgeometric_real1.0_syn0.0_fTune_094__real1.0_syn1.0",
-        
-    ]
-    main(experiments_list)
+    main()

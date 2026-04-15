@@ -31,8 +31,8 @@ val_split      = cfg.get("val_split", 0.1)   # unused now (kept for backward com
 random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
 
 # NEW: separate roots
-train_root = cfg["train_root_dir"]   # e.g. .../EMBED_binary_clean/train
-val_root   = cfg["val_root_dir"]     # e.g. .../EMBED_binary_clean/val
+train_root = os.path.join(cfg["root_dir"],'train')   # e.g. .../EMBED_binary_clean/train
+val_root   = os.path.join(cfg["root_dir"], 'val')     # e.g. .../EMBED_binary_clean/val
 
 real_path_train  = os.path.join(train_root, cfg["data_dir"])
 synth_path_train = os.path.join(train_root, cfg["synth_data_dir"])

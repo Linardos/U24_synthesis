@@ -27,7 +27,8 @@ clinical_cols = [
     "tissueden",
     "path_severity",
     "side",         # laterality of finding described in current row (R,L,B)
-    "bside"         # laterality of biopsied finding (R,L)
+    "bside",         # laterality of biopsied finding (R,L)
+    "loc_num",
 ]
 metadata_cols = [
     "empi_anon",
