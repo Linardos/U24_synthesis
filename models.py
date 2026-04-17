@@ -85,13 +85,13 @@ def get_model(model_name: str, num_classes: int = num_classes, pretrained: bool 
         weights = models.ResNet50_Weights.IMAGENET1K_V2 if pretrained else None
         backbone = models.resnet50(weights=weights)
 
-    elif model_name == "densenet121":
-        weights = models.DenseNet121_Weights.IMAGENET1K_V1 if pretrained else None
-        backbone = models.densenet121(weights=weights)
+    # elif model_name == "densenet121":
+    #     weights = models.DenseNet121_Weights.IMAGENET1K_V1 if pretrained else None
+    #     backbone = models.densenet121(weights=weights)
 
-    elif model_name == "densenet201":
-        weights = models.DenseNet201_Weights.IMAGENET1K_V1 if pretrained else None
-        backbone = models.densenet201(weights=weights)
+    # elif model_name == "densenet201":
+    #     weights = models.DenseNet201_Weights.IMAGENET1K_V1 if pretrained else None
+    #     backbone = models.densenet201(weights=weights)
 
     elif model_name == "efficientnet_b0":
         weights = models.EfficientNet_B0_Weights.IMAGENET1K_V1 if pretrained else None

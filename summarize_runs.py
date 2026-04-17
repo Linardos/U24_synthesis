@@ -1,35 +1,35 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
-import matplotlib.pyplot as plt
 
 # --- ROOT DIRECTORY ---
 ROOT = Path("/home/locolinux2/U24_synthesis/experiments")
 
 # --- HARDCODED RUNS ---
-PHASE1_DIRS = [
-    "151_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed42_Augsgeometric_real0.75_syn0.25",
-    "151_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed43_Augsgeometric_real0.75_syn0.25",
-    "151_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed44_Augsgeometric_real0.75_syn0.25",
-    "151_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed45_Augsgeometric_real0.75_syn0.25",
-    "151_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed46_Augsgeometric_real0.75_syn0.25",
+Syn025 = [
+        "159_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed42_Augsgeometric_real1.0_syn0.0_fTune_157_real1.0_syn0.25",
+        "159_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed43_Augsgeometric_real1.0_syn0.0_fTune_157_real1.0_syn0.25",
+        "159_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed44_Augsgeometric_real1.0_syn0.0_fTune_157_real1.0_syn0.25",
+        "159_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed45_Augsgeometric_real1.0_syn0.0_fTune_157_real1.0_syn0.25",
+        "159_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed46_Augsgeometric_real1.0_syn0.0_fTune_157_real1.0_syn0.25",
 ]
 
-PHASE2_DIRS = [
-    "152_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed42_Augsgeometric_real1.0_syn0.0_fTune_151_eal0.75_syn0.25",
-    "152_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed43_Augsgeometric_real1.0_syn0.0_fTune_151_eal0.75_syn0.25",
-    "152_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed44_Augsgeometric_real1.0_syn0.0_fTune_151_eal0.75_syn0.25",
-    "152_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed45_Augsgeometric_real1.0_syn0.0_fTune_151_eal0.75_syn0.25",
-    "152_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed46_Augsgeometric_real1.0_syn0.0_fTune_151_eal0.75_syn0.25",
+Syn075 = [
+        "160_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed42_Augsgeometric_real1.0_syn0.0_fTune_158_real1.0_syn0.75",
+        "160_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed43_Augsgeometric_real1.0_syn0.0_fTune_158_real1.0_syn0.75",
+        "160_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed44_Augsgeometric_real1.0_syn0.0_fTune_158_real1.0_syn0.75",
+        "160_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed45_Augsgeometric_real1.0_syn0.0_fTune_158_real1.0_syn0.75",
+        "160_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed46_Augsgeometric_real1.0_syn0.0_fTune_158_real1.0_syn0.75",
 ]
 
 BASELINE_DIRS = [
-    "153_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed42_Augsgeometric_real1.0_syn0.0",
-    "153_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed43_Augsgeometric_real1.0_syn0.0",
-    "153_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed44_Augsgeometric_real1.0_syn0.0",
-    "153_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed45_Augsgeometric_real1.0_syn0.0",
-    "153_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed46_Augsgeometric_real1.0_syn0.0",
+        "156_EMBED_binary_256x256_holdout_convnext_tiny_Replacement_seed42_Augsgeometric_real1.0_syn0.0",
+        "156_EMBED_binary_256x256_holdout_convnext_tiny_Replacement_seed43_Augsgeometric_real1.0_syn0.0",
+        "156_EMBED_binary_256x256_holdout_convnext_tiny_Replacement_seed44_Augsgeometric_real1.0_syn0.0",
+        "156_EMBED_binary_256x256_holdout_convnext_tiny_Replacement_seed45_Augsgeometric_real1.0_syn0.0",
+        "156_EMBED_binary_256x256_holdout_convnext_tiny_Replacement_seed46_Augsgeometric_real1.0_syn0.0",
 ]
+
 
 def extract_best_metrics(run_dir):
     logs_path = ROOT / run_dir / "logs.csv"
@@ -37,7 +37,6 @@ def extract_best_metrics(run_dir):
 
     val_df = df[df["phase"] == "val"]
 
-    # Pick best epoch by balanced accuracy
     best = val_df.loc[val_df["balanced_acc"].idxmax()]
 
     return {
@@ -71,13 +70,13 @@ def process_group(dirs, label):
 
 # --- PROCESS ---
 baseline_df, baseline_summary = process_group(BASELINE_DIRS, "baseline")
-phase1_df, phase1_summary = process_group(PHASE1_DIRS, "phase1")
-phase2_df, phase2_summary = process_group(PHASE2_DIRS, "phase2")
+syn025_df, syn025_summary = process_group(Syn025, "syn025_phase2")
+syn075_df, syn075_summary = process_group(Syn075, "syn075_phase2")
 
 summary_df = pd.DataFrame([
     baseline_summary,
-    phase1_summary,
-    phase2_summary
+    syn025_summary,
+    syn075_summary
 ])
 
 # --- PRINT RESULTS ---

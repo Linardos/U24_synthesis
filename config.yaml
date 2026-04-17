@@ -5,19 +5,21 @@
 # root_dir: '/mnt/d/Datasets/SanityInBreast_train'
 # root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_256x256/train'
 # root_dir: '/mnt/d/Datasets/EMBED/EMBED_clean_256x256_binary/train'
-# root_dir: '/mnt/d/Datasets/EMBED/EMBED_binary_256x256/train'
-root_dir: '/mnt/d/Datasets/EMBED/EMBED_binary_clean/train'
+# root_dir: '/mnt/d/Datasets/EMBED/EMBED_binary_clean/train'
+root_dir: '/mnt/d/Datasets/EMBED/EMBED_binary_256x256/train'
 # root_dir: '/mnt/d/Datasets/CMMD/CMMD_binary_256x256/train'
 # root_dir: '/mnt/d/Datasets/CMMD/balanced_CMMD'
+# root_dir: '/mnt/d/Datasets/inbreast/inbreast_clean/train'
 
 # New:
 # train_root_dir: '/mnt/d/Datasets/EMBED/EMBED_binary_clean/train'
 # val_root_dir:   '/mnt/d/Datasets/EMBED/EMBED_binary_clean/val'
 data_dir: 'original' #'original' # 'stylegan_256x256', 'vqvae' , 'original'
 synth_data_dir: 'synthetic_guide5.0'
+embed_synth: False # use embed synthetic data for other datasets too
 # synth_data_dir: 'synthetic_guide3.0'
 real_percentage:      1.0    # keep    this fraction of each class
-synthetic_multiplier: 0.0     # append (multiplier × kept_real) synthetic
+synthetic_multiplier: 0.75     # append (multiplier × kept_real) synthetic
 # for replacement of real with synthetic:
 # synth_mult = (1 - f) / f
 #     f = 0.7 → synth_mult ≈ 0.43 (70 % real / 30 % synth)
@@ -38,15 +40,20 @@ fine_tune:          False            # set → true to activate
 # fine_tune_ckpt:  100_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.5
 # fine_tune_ckpt:  101_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn0.75
 # fine_tune_ckpt:  102_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsintensity_real1.0_syn1.0
-fine_tune_ckpt: 130_EMBED_binary_256x256_holdout_convnext_tiny_syngscale3_seed44_Augsbasic_real1.0_syn0.25
-fine_tune_ckpt: 130_EMBED_binary_256x256_holdout_convnext_tiny_syngscale3_seed44_Augsbasic_real1.0_syn0.5
-fine_tune_ckpt: 130_EMBED_binary_256x256_holdout_convnext_tiny_syngscale3_seed44_Augsbasic_real1.0_syn0.75
-fine_tune_ckpt: 130_EMBED_binary_256x256_holdout_convnext_tiny_syngscale3_seed44_Augsbasic_real1.0_syn1.0
-fine_tune_ckpt: 151_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed42_Augsgeometric_real0.75_syn0.25
-# fine_tune_ckpt: 151_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed43_Augsgeometric_real0.75_syn0.25
-# fine_tune_ckpt: 151_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed44_Augsgeometric_real0.75_syn0.25
-# fine_tune_ckpt: 151_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed45_Augsgeometric_real0.75_syn0.25
-# fine_tune_ckpt: 151_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed46_Augsgeometric_real0.75_syn0.25
+# fine_tune_ckpt: 130_EMBED_binary_256x256_holdout_convnext_tiny_syngscale3_seed44_Augsbasic_real1.0_syn0.25
+# fine_tune_ckpt: 130_EMBED_binary_256x256_holdout_convnext_tiny_syngscale3_seed44_Augsbasic_real1.0_syn0.5
+# fine_tune_ckpt: 130_EMBED_binary_256x256_holdout_convnext_tiny_syngscale3_seed44_Augsbasic_real1.0_syn0.75
+# fine_tune_ckpt: 130_EMBED_binary_256x256_holdout_convnext_tiny_syngscale3_seed44_Augsbasic_real1.0_syn1.0
+# fine_tune_ckpt: 157_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed42_Augsgeometric_real1.0_syn0.25
+# fine_tune_ckpt: 157_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed43_Augsgeometric_real1.0_syn0.25
+# fine_tune_ckpt: 157_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed44_Augsgeometric_real1.0_syn0.25
+# fine_tune_ckpt: 157_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed45_Augsgeometric_real1.0_syn0.25
+# fine_tune_ckpt: 157_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed46_Augsgeometric_real1.0_syn0.25
+fine_tune_ckpt: 158_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed42_Augsgeometric_real1.0_syn0.75
+# fine_tune_ckpt: 158_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed43_Augsgeometric_real1.0_syn0.75
+# fine_tune_ckpt: 158_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed44_Augsgeometric_real1.0_syn0.75
+# fine_tune_ckpt: 158_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed45_Augsgeometric_real1.0_syn0.75
+# fine_tune_ckpt: 158_EMBED_binary_256x256_holdout_convnext_tiny_mulseed_seed46_Augsgeometric_real1.0_syn0.75
 # ------------------------------------------------
 freeze_backbone_epochs: 0   # 0  → never freeze
 # ------------------------------------------------
@@ -63,7 +70,7 @@ early_stopping_patience: 10
 num_epochs: 100
 val_split: 0.1 # only for hold-out not cval
 k_folds: 5 # only for cval
-model_name: convnext_tiny #convnext_tiny
+model_name: efficientnet_b0 # convnext_tiny #convnext_tiny
   # resnet50 works best with 0.001 LR
   # convnext_tiny
   # - efficientnet_b0
@@ -74,7 +81,7 @@ model_name: convnext_tiny #convnext_tiny
   # - vgg19
 seed: 44
 store_sample_per_epoch: True # to visualize images
-experiment_number: 153 # 62 onward is 12 vs 56
+experiment_number: 163 # 62 onward is 12 vs 56
 #
 # 90 oracle redo (deleted by accident oops)
 # --------103-107 is fine-tuning on geometric augs
@@ -90,9 +97,21 @@ experiment_number: 153 # 62 onward is 12 vs 56
 # --------140-144 plausible deniability - syn3
 # --------145-149 plausible deniability - syn5
 # -------150 - seed experiments
+# - 151, 152 0.25 synth 0.75 real
+# - 153 baseline
+# - 154, 155 0.75 synth, 1 real
+# - AGAIN
+# - 156 baseline
+# - 157 0.25 synth
+# - 158 0.75 synth
+# - 159 0.25 ftune
+# - 160 0.75 ftune
+# - 161 efficientnet
+# - 162 0.25
+# - 163 0.75
 # ───────────── sanity-check dial ─────────────
 sanity_check: False        # turn ON to over-fit a tiny slice
 
-experiment_name: Replacement #FTune_Freeze5 # four_class_pretrainedImagenet_frozenlayers #binary_classification #
+experiment_name: mulseed #FTune_Freeze5 # four_class_pretrainedImagenet_frozenlayers #binary_classification #
 # experiment_name: sanity_EMBED_multi_class_CV
 # experiment_name: ThreeDataDM_augmentations

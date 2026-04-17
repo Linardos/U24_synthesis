@@ -32,7 +32,11 @@ random.seed(seed); np.random.seed(seed); torch.manual_seed(seed)
 
 root_dir   = cfg["root_dir"]
 real_path  = os.path.join(root_dir, cfg["data_dir"])
-synth_path = os.path.join(root_dir, cfg["synth_data_dir"])
+# synth_path = os.path.join(root_dir, cfg["synth_data_dir"])
+if cfg["embed_synth"]:
+    synth_path = os.path.join('/mnt/d/Datasets/EMBED/EMBED_binary_clean/train', cfg["synth_data_dir"])
+else:
+    synth_path = os.path.join(root_dir, cfg["synth_data_dir"])
 
 # ─────────────── experiment folder & (maybe) resume ────────────────────────
 dataset_tag = Path(root_dir).parts[-2]           # -> 'EMBED' / 'CMMD'
@@ -249,6 +253,10 @@ backbone_params = []
 head_params     = []
 for n,p in model.named_parameters():
     (head_params if n.startswith('backbone.fc') else backbone_params).append(p)
+    # backbone_params = [p for n, p in model.named_parameters()
+    #                if n.startswith("backbone.") and p.requires_grad]
+    # head_params = [p for n, p in model.named_parameters()
+    #             if n.startswith("head.") and p.requires_grad]
 
 optim = torch.optim.AdamW([
         {'params': backbone_params, 'lr': cfg["learning_rate"]*0.1}, # lower LR for backbone

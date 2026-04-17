@@ -42,6 +42,8 @@ MODEL_DIR = "097_EMBED_binary_256x256_holdout_convnext_tiny_model_regularization
 MODEL_DIR = "111_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_101_real1.0_syn0.75"
 MODEL_DIR = "121_EMBED_binary_256x256_holdout_convnext_tiny_FTune_Freeze5_seed44_Augsgeometric_real1.0_syn0.0_fTune_096_real1.0_syn0.25"
 MODEL_DIR = "109_EMBED_binary_256x256_holdout_convnext_tiny_augExperiments_seed44_Augsgeometric_real1.0_syn0.0_fTune_099_real1.0_syn0.25"
+# MODEL_DIR = "155_EMBED_binary_clean_holdout_convnext_tiny_Replacement_seed46_Augsgeometric_real1.0_syn0.0_fTune_154_real1.0_syn0.75"
+MODEL_DIR = "156_EMBED_binary_256x256_holdout_convnext_tiny_Replacement_seed46_Augsgeometric_real1.0_syn0.0"
 MODEL_CKPT = (
     "/home/locolinux2/U24_synthesis/experiments/"
     f"{MODEL_DIR}/last.pt"
@@ -49,7 +51,8 @@ MODEL_CKPT = (
 
 # Dataset root (parent of the three splits below)
 DATASET     = "EMBED"
-DATA_ROOT   = f"/mnt/d/Datasets/{DATASET}/{DATASET}_binary_256x256"
+# DATA_ROOT   = f"/mnt/d/Datasets/{DATASET}/{DATASET}_binary_256x256"
+DATA_ROOT   = f"/mnt/d/Datasets/{DATASET}/{DATASET}_binary_clean"
 
 # Which subfolders to evaluate
 SPLITS = [
